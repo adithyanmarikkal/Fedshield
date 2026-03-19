@@ -1,0 +1,41 @@
+{
+  "_format": "hh-sol-cache-2",
+  "files": {
+    "/home/adithyan/Desktop/New Folder (1)/server/Blockchain/contracts/contract.sol": {
+      "lastModificationDate": 1773766658025,
+      "contentHash": "d8c63c283c6d7d755ce90a3e73a3f358",
+      "sourceName": "contracts/contract.sol",
+      "solcConfig": {
+        "version": "0.8.20",
+        "settings": {
+          "evmVersion": "paris",
+          "optimizer": {
+            "enabled": false,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.0"
+      ],
+      "artifacts": [
+        "FedShieldCoordinator"
+      ]
+    }
+  }
+}
