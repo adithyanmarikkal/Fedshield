@@ -1,353 +1,397 @@
+"""
+aggregation.py
+═══════════════════════════════════════════════════════════════════════
+Federated Learning – Server-Side Aggregation Script
+═══════════════════════════════════════════════════════════════════════
+
+Flow (run as admin / contract owner):
+  1. Query the Blockchain API server (localhost:4000) using admin access:
+       - GET /api/current-round      → active round number
+       - GET /api/latest-model       → latest global model CID
+       - GET /api/client-updates/<round> → list of client update CIDs
+  2. Download each model (client + global base) from IPFS via Pinata gateway.
+  3. Perform FedAvg aggregation on the downloaded histogram data.
+  4. Upload the aggregated global model to IPFS and register it on-chain
+     via POST /api/upload-and-register  (admin wallet signs the tx).
+
+Usage:
+  python aggregation.py
+  python aggregation.py --round 3          # aggregate a specific round
+  python aggregation.py --api http://localhost:4000
+"""
+
 import os
 import sys
 import glob
 import json
+import tempfile
+import argparse
+import requests
 import numpy as np
 import xgboost as xgb
+from pathlib import Path
 from collections import defaultdict
 
-# ── Blockchain connector (optional – graceful degradation if unavailable) ─────
-try:
-    _BLOCKCHAIN_DIR = os.path.join(os.path.dirname(__file__), "..", "Blockchain")
-    sys.path.insert(0, os.path.abspath(_BLOCKCHAIN_DIR))
-    from blockchain_connector import run_aggregation_round as _bc_run_round
+# ── Configuration ──────────────────────────────────────────────────────────────
+BLOCKCHAIN_API = os.getenv("BLOCKCHAIN_API", "http://localhost:4000")
+IPFS_GATEWAY   = os.getenv("IPFS_GATEWAY",   "https://gateway.pinata.cloud/ipfs")
+MODEL_DIR      = os.getenv("MODEL_DIR",       os.path.join(os.path.dirname(__file__), "model"))
 
-    BLOCKCHAIN_ENABLED = True
-except Exception as _bc_err:
-    BLOCKCHAIN_ENABLED = False
-    _bc_err_msg = str(_bc_err)
+REQUEST_TIMEOUT = 30   # seconds per HTTP request
+DOWNLOAD_TIMEOUT = 120  # seconds for IPFS downloads (can be slow)
+
+# ── Pretty helpers ─────────────────────────────────────────────────────────────
+
+def _sep(char="═", width=70):
+    print(char * width)
+
+def _header(title):
+    _sep()
+    print(f"  {title}")
+    _sep()
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 1 – Blockchain API helpers  (admin read access, no private key needed)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def get_current_round(api_base: str) -> int:
+    """Fetch the active round number from the on-chain contract."""
+    url = f"{api_base}/api/current-round"
+    print(f"🔗 GET {url}")
+    resp = requests.get(url, timeout=REQUEST_TIMEOUT)
+    resp.raise_for_status()
+    data = resp.json()
+    # server returns { round: <number> }  or  { currentRound: <number> }
+    round_val = data.get("round") or data.get("currentRound") or data.get("data")
+    if round_val is None:
+        raise ValueError(f"Unexpected response from /api/current-round: {data}")
+    return int(round_val)
 
 
-def aggregate_histograms_fedavg(
-    histogram_folder="model", output_path="model/aggregated_histograms.json"
-):
+def get_latest_global_model_cid(api_base: str) -> str | None:
+    """Fetch the latest global model CID recorded on-chain."""
+    url = f"{api_base}/api/latest-model"
+    print(f"🔗 GET {url}")
+    resp = requests.get(url, timeout=REQUEST_TIMEOUT)
+    if resp.status_code == 200:
+        data = resp.json()
+        cid = data.get("cid") or data.get("ipfsCID") or data.get("data")
+        return str(cid) if cid else None
+    if resp.status_code == 500:
+        # "No model recorded yet" → first round
+        return None
+    resp.raise_for_status()
+
+
+def get_client_updates_for_round(api_base: str, round_num: int) -> list[dict]:
     """
-    TRUE FEDERATED LEARNING: Aggregate client histograms using FedAvg algorithm.
-
-    This implements the core FedAvg algorithm for XGBoost by aggregating gradients
-    and hessians from multiple clients. This is the proper way to do federated learning
-    with tree-based models.
-
-    Args:
-        histogram_folder: Path to folder containing client histogram files
-        output_path: Path where aggregated histograms will be saved
-
-    Returns:
-        Dictionary containing aggregated histograms and metadata
+    Fetch all client update records for the given round.
+    Each record has at least: nodeAddress, ipfsCID, timestamp, metadata.
     """
-    print("=" * 70)
-    print("🔐 TRUE FEDERATED LEARNING - HISTOGRAM AGGREGATION (FedAvg)")
-    print("=" * 70)
-    print(f"\n🔍 Searching for client histograms in '{histogram_folder}'...")
+    url = f"{api_base}/api/client-updates/{round_num}"
+    print(f"🔗 GET {url}")
+    resp = requests.get(url, timeout=REQUEST_TIMEOUT)
+    resp.raise_for_status()
+    data = resp.json()
+    # server returns { updates: [...] }  or  a raw list
+    if isinstance(data, list):
+        return data
+    return data.get("updates") or data.get("data") or []
 
-    # Find all histogram JSON files (exclude aggregated_histograms.json)
-    all_histogram_files = glob.glob(os.path.join(histogram_folder, "*histograms*.json"))
-    histogram_files = [
-        f
-        for f in all_histogram_files
-        if not os.path.basename(f).startswith("aggregated")
-    ]
 
-    if len(histogram_files) == 0:
-        raise FileNotFoundError(f"No histogram files found in '{histogram_folder}'")
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 2 – IPFS download helpers
+# ══════════════════════════════════════════════════════════════════════════════
 
-    print(f"📊 Found {len(histogram_files)} client histogram file(s):")
+def download_from_ipfs(cid: str, dest_path: str, gateway: str = IPFS_GATEWAY):
+    """Download a file from IPFS and save it to dest_path."""
+    url = f"{gateway}/{cid}"
+    print(f"   📥 Downloading CID {cid[:20]}… → {os.path.basename(dest_path)}")
+    resp = requests.get(url, timeout=DOWNLOAD_TIMEOUT, stream=True)
+    resp.raise_for_status()
+    with open(dest_path, "wb") as fh:
+        for chunk in resp.iter_content(chunk_size=64 * 1024):
+            fh.write(chunk)
+    print(f"      ✅ Saved ({os.path.getsize(dest_path):,} bytes)")
 
-    # Load all client histograms
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 3 – Aggregation logic (FedAvg over histogram data)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def aggregate_histograms_fedavg(client_json_paths: list[str]) -> dict:
+    """
+    Aggregate histogram JSON files from multiple clients using FedAvg.
+    Expects each file to have: { num_samples, histograms: { feature: { bin: {G, H} } } }
+    Returns the aggregated dictionary.
+    """
+    _header("📊 FEDAVG HISTOGRAM AGGREGATION")
+
     client_data = []
     total_samples = 0
 
-    for i, hist_file in enumerate(histogram_files, 1):
+    for path in client_json_paths:
         try:
-            with open(hist_file, "r") as f:
-                data = json.load(f)
-                num_samples = data.get("num_samples", 0)
+            with open(path) as fh:
+                data = json.load(fh)
+            ns = data.get("num_samples", 0)
+            if ns == 0:
+                print(f"   ⚠️  Skipping {os.path.basename(path)} – no num_samples")
+                continue
+            client_data.append(data)
+            total_samples += ns
+            print(f"   ✅ {os.path.basename(path)}  client={data.get('client_id','?')}  samples={ns}")
+        except Exception as exc:
+            print(f"   ⚠️  Could not load {path}: {exc}")
 
-                # Skip if no num_samples (invalid client histogram)
-                if num_samples == 0:
-                    print(f"   ⚠️  Skipping {os.path.basename(hist_file)} (no samples)")
-                    continue
+    if not client_data:
+        raise ValueError("No valid client histogram data to aggregate.")
 
-                client_data.append(data)
-                total_samples += num_samples
-                client_id = data.get("client_id", f"client_{i}")
-                print(f"   {i}. {os.path.basename(hist_file)}")
-                print(f"      └─ Client: {client_id}, Samples: {num_samples}")
-        except Exception as e:
-            print(f"⚠️  Failed to load {os.path.basename(hist_file)}: {e}")
+    print(f"\n   Total samples: {total_samples}")
 
-    if len(client_data) == 0:
-        raise ValueError("No valid histogram files could be loaded")
+    # Compute per-client weights
+    weights = [d["num_samples"] / total_samples for d in client_data]
+    for d, w in zip(client_data, weights):
+        print(f"   Client {d.get('client_id','?')}: weight={w:.4f}")
 
-    print(f"\n📈 Total samples across all clients: {total_samples}")
+    print("\n   🔄 Aggregating gradients and hessians…")
 
-    # Compute client weights based on sample counts (FedAvg)
-    client_weights = []
-    for data in client_data:
-        weight = data["num_samples"] / total_samples
-        client_weights.append(weight)
-        print(f"   Client {data.get('client_id', 'unknown')}: weight = {weight:.4f}")
+    agg = defaultdict(lambda: defaultdict(lambda: {"G": None, "H": None}))
 
-    print(f"\n🔄 Aggregating histograms using weighted averaging (FedAvg)...")
-
-    # Aggregate histograms
-    aggregated_histograms = defaultdict(
-        lambda: defaultdict(lambda: {"G": None, "H": None})
-    )
-
-    # Iterate through all features
-    for client_idx, data in enumerate(client_data):
-        weight = client_weights[client_idx]
-        histograms = data.get("histograms", {})
-
-        for feature_name, feature_hist in histograms.items():
-            for bin_name, bin_data in feature_hist.items():
+    for data, _ in zip(client_data, weights):
+        for feat, feat_hist in data.get("histograms", {}).items():
+            for bin_name, bin_data in feat_hist.items():
                 G = np.array(bin_data["G"])
                 H = np.array(bin_data["H"])
-
-                # Simple summation: G_global = Σ G_i, H_global = Σ H_i
-                if aggregated_histograms[feature_name][bin_name]["G"] is None:
-                    aggregated_histograms[feature_name][bin_name]["G"] = G
-                    aggregated_histograms[feature_name][bin_name]["H"] = H
+                if agg[feat][bin_name]["G"] is None:
+                    agg[feat][bin_name]["G"] = G.copy()
+                    agg[feat][bin_name]["H"] = H.copy()
                 else:
-                    aggregated_histograms[feature_name][bin_name]["G"] += G
-                    aggregated_histograms[feature_name][bin_name]["H"] += H
+                    agg[feat][bin_name]["G"] += G
+                    agg[feat][bin_name]["H"] += H
 
-    # Convert numpy arrays back to lists for JSON serialization
-    for feature_name in aggregated_histograms:
-        for bin_name in aggregated_histograms[feature_name]:
-            aggregated_histograms[feature_name][bin_name]["G"] = aggregated_histograms[
-                feature_name
-            ][bin_name]["G"].tolist()
-            aggregated_histograms[feature_name][bin_name]["H"] = aggregated_histograms[
-                feature_name
-            ][bin_name]["H"].tolist()
+    # Convert numpy → list for JSON serialisation
+    for feat in agg:
+        for b in agg[feat]:
+            agg[feat][b]["G"] = agg[feat][b]["G"].tolist()
+            agg[feat][b]["H"] = agg[feat][b]["H"].tolist()
 
-    # Prepare output data
-    output_data = {
+    output = {
         "aggregation_method": "FedAvg",
         "num_clients": len(client_data),
         "total_samples": total_samples,
-        "client_weights": client_weights,
-        "client_ids": [
-            data.get("client_id", f"client_{i}")
-            for i, data in enumerate(client_data, 1)
-        ],
-        "histograms": dict(aggregated_histograms),
+        "client_weights": weights,
+        "client_ids": [d.get("client_id", f"client_{i}") for i, d in enumerate(client_data, 1)],
+        "histograms": dict(agg),
     }
 
-    # Save aggregated histograms
-    os.makedirs(
-        os.path.dirname(output_path) if os.path.dirname(output_path) else ".",
-        exist_ok=True,
-    )
-    with open(output_path, "w") as f:
-        json.dump(output_data, f, indent=2)
-
-    print(f"✅ Aggregated histograms from {len(client_data)} clients")
-    print(f"💾 Saved to: {output_path}")
-
-    # Print summary
-    print("\n" + "=" * 70)
-    print("📈 FEDERATED AGGREGATION SUMMARY")
-    print("=" * 70)
-    print(f"Algorithm: FedAvg (Federated Averaging)")
-    print(f"Clients aggregated: {len(client_data)}")
-    print(f"Total training samples: {total_samples}")
-    print(f"Features aggregated: {len(aggregated_histograms)}")
-    print("=" * 70)
-
-    return output_data
+    print(f"\n   ✅ Aggregated {len(client_data)} clients  |  {len(agg)} features")
+    return output
 
 
-def build_global_model_from_histograms(
-    histogram_path="model/aggregated_histograms.json",
-    base_model_path="model/Central_model.json",
-    output_path="model/global_model.json",
-    num_boost_rounds=10,
-):
+def build_global_model(
+    agg_histograms: dict,
+    base_model_path: str | None,
+    output_path: str,
+) -> xgb.XGBClassifier:
     """
-    Build a global XGBoost model from aggregated histograms.
-
-    This uses the aggregated gradients and hessians to train a new global model,
-    implementing the server-side update in federated learning.
-
-    Args:
-        histogram_path: Path to aggregated histogram file
-        base_model_path: Path to base/previous global model
-        output_path: Path to save the new global model
-        num_boost_rounds: Number of boosting rounds to add
-
-    Returns:
-        The updated global XGBoost model
+    Build (or update) the global XGBoost model.
+    Currently uses the base model as the global model and records the aggregated
+    histogram metadata alongside it.  In production you would rebuild trees from
+    the gradient statistics.
     """
-    print("\n" + "=" * 70)
-    print("🌍 BUILDING GLOBAL MODEL FROM AGGREGATED HISTOGRAMS")
-    print("=" * 70)
+    _header("🌍 BUILDING GLOBAL MODEL")
 
-    # Load aggregated histograms
-    print(f"\n📂 Loading aggregated histograms from {histogram_path}...")
-    with open(histogram_path, "r") as f:
-        agg_data = json.load(f)
-
-    print(f"✅ Loaded histograms from {agg_data['num_clients']} clients")
-    print(f"   Total samples: {agg_data['total_samples']}")
-
-    # Load base model
-    print(f"\n📂 Loading base model from {base_model_path}...")
-    if os.path.exists(base_model_path):
-        base_model = xgb.XGBClassifier()
-        base_model.load_model(base_model_path)
-        print("✅ Base model loaded successfully")
-    else:
-        print("⚠️  Base model not found, will create new model")
-        base_model = None
-
-    # In a true implementation, you would use the aggregated gradients/hessians
-    # to build new trees. However, XGBoost's Python API doesn't directly support
-    # this. In production federated learning systems, this is done at a lower level.
-
-    # For this implementation, we'll use the base model as the global model
-    # In practice, you would implement custom tree building using the aggregated stats
-
-    if base_model is not None:
-        global_model = base_model
-        print("\n✅ Using base model as global model")
-        print(
-            "   (In production FL, new trees would be built from aggregated gradients)"
-        )
-    else:
-        raise ValueError("Base model required for global model update")
-
-    # Save the global model
-    os.makedirs(
-        os.path.dirname(output_path) if os.path.dirname(output_path) else ".",
-        exist_ok=True,
-    )
-    global_model.save_model(output_path)
-    print(f"\n💾 Global model saved to: {output_path}")
-
-    print("\n" + "=" * 70)
-    print("✅ GLOBAL MODEL UPDATE COMPLETE")
-    print("=" * 70)
-
-    return global_model
-
-
-def federated_averaging_aggregation(
-    model_folder="model",
-    output_path="model/aggregated_model.json",
-    weights=None,
-    use_histograms=True,
-):
-    """
-    TRUE FEDERATED AVERAGING for XGBoost models.
-
-    This implements proper federated learning by:
-    1. Aggregating client histograms (gradients/hessians) using FedAvg
-    2. Building a global model from aggregated statistics
-
-    Args:
-        model_folder: Path to folder containing client data
-        output_path: Path where the global model will be saved
-        weights: Optional custom weights (if None, uses sample-based weights)
-        use_histograms: If True, uses histogram-based aggregation (recommended)
-
-    Returns:
-        The aggregated global model
-    """
-    if use_histograms:
-        # TRUE FEDERATED LEARNING PATH
-        print("\n🔐 Using TRUE FEDERATED LEARNING (histogram-based aggregation)")
-
-        # Step 1: Aggregate histograms from all clients
-        agg_histograms_path = os.path.join(model_folder, "aggregated_histograms.json")
-        aggregate_histograms_fedavg(
-            histogram_folder=model_folder, output_path=agg_histograms_path
-        )
-
-        # Step 2: Build global model from aggregated histograms
-        base_model_path = os.path.join(model_folder, "Central_model.json")
-        if not os.path.exists(base_model_path):
-            # Try alternative paths
-            alt_paths = ["Central_model.json", "model/Central_model.json"]
-            for alt_path in alt_paths:
-                if os.path.exists(alt_path):
-                    base_model_path = alt_path
-                    break
-
-        global_model = build_global_model_from_histograms(
-            histogram_path=agg_histograms_path,
-            base_model_path=base_model_path,
-            output_path=output_path,
-        )
-
-        # ── Upload to IPFS + register on Polygon Amoy ─────────────────────
-        new_cid = None
-        if BLOCKCHAIN_ENABLED:
-            try:
-                print(
-                    "\n🔗 Registering aggregated model on Polygon Amoy via blockchain connector..."
-                )
-                new_cid = _bc_run_round(output_path)
-            except Exception as bc_exc:
-                print(f"⚠️  Blockchain registration skipped: {bc_exc}")
-        else:
-            print(
-                f"⚠️  Blockchain connector unavailable – skipping on-chain registration."
-            )
-            if not BLOCKCHAIN_ENABLED:
-                print(f"   Reason: {_bc_err_msg}")
-
-        return global_model, new_cid
-    else:
-        # Fallback to simple model aggregation (not true federated learning)
-        print("\n⚠️  Using simplified model aggregation (not true federated learning)")
-        print("   For true FL, set use_histograms=True")
-
-        model_files = sorted(glob.glob(os.path.join(model_folder, "client_*.json")))
-
-        if len(model_files) == 0:
-            raise FileNotFoundError(f"No client model files found in '{model_folder}'")
-
-        # Load models and use weighted selection
-        if weights is None:
-            weights = [1.0 / len(model_files)] * len(model_files)
-
-        max_weight_idx = weights.index(max(weights))
-
+    if base_model_path and os.path.exists(base_model_path):
+        print(f"   📂 Loading base model: {base_model_path}")
         model = xgb.XGBClassifier()
-        model.load_model(model_files[max_weight_idx])
-        model.save_model(output_path)
+        model.load_model(base_model_path)
+        print("   ✅ Base model loaded")
+    else:
+        raise FileNotFoundError(
+            f"Base model not found at: {base_model_path}\n"
+            "   Provide a Central_model.json or set MODEL_DIR correctly."
+        )
 
-        return model, None
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+    model.save_model(output_path)
+    print(f"   💾 Global model saved → {output_path}")
 
+    # Also save the aggregated histogram metadata next to the model
+    hist_path = output_path.replace(".json", "_histograms.json")
+    with open(hist_path, "w") as fh:
+        json.dump(agg_histograms, fh, indent=2)
+    print(f"   💾 Aggregated histograms → {hist_path}")
+
+    return model
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# STEP 4 – Upload aggregated model and register on-chain  (admin only)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def upload_and_register_global_model(api_base: str, model_path: str) -> dict:
+    """
+    POST the aggregated model file to /api/upload-and-register.
+    The blockchain server signs the updateGlobalModel() tx with the admin wallet.
+    Returns the JSON response { cid, txHash, blockNumber, gateway, explorer }.
+    """
+    _header("🔗 UPLOADING & REGISTERING GLOBAL MODEL (ADMIN)")
+    url = f"{api_base}/api/upload-and-register"
+    print(f"   📤 POST {url}")
+    print(f"   📁 File: {model_path}")
+
+    with open(model_path, "rb") as fh:
+        resp = requests.post(
+            url,
+            files={"model": (os.path.basename(model_path), fh, "application/json")},
+            data={"pinName": f"fedshield_global_{int(__import__('time').time())}"},
+            timeout=DOWNLOAD_TIMEOUT,
+        )
+
+    if not resp.ok:
+        raise RuntimeError(
+            f"upload-and-register failed [{resp.status_code}]: {resp.text[:500]}"
+        )
+
+    result = resp.json()
+    print(f"   ✅ CID       : {result.get('cid')}")
+    print(f"   ✅ Tx Hash   : {result.get('txHash')}")
+    print(f"   ✅ Block     : {result.get('blockNumber')}")
+    print(f"   🌐 Gateway   : {result.get('gateway')}")
+    print(f"   🔍 Explorer  : {result.get('explorer')}")
+    return result
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Main orchestration
+# ══════════════════════════════════════════════════════════════════════════════
+
+def run_aggregation(api_base: str, target_round: int | None = None):
+    """
+    Full federated aggregation pipeline:
+      fetch blockchain state → download IPFS models → aggregate → register.
+    """
+    _header("🚀 FEDERATED LEARNING AGGREGATION (ADMIN)")
+    print(f"   Blockchain API : {api_base}")
+    print(f"   IPFS Gateway   : {IPFS_GATEWAY}")
+    print(f"   Model dir      : {MODEL_DIR}")
+
+    # ── 1. Fetch blockchain state ──────────────────────────────────────────────
+    print("\n📡 STEP 1 – Fetching blockchain state…")
+    current_round = get_current_round(api_base)
+    print(f"   Current round : {current_round}")
+
+    # Determine the round to aggregate
+    agg_round = target_round if target_round is not None else current_round
+    print(f"   Aggregating round : {agg_round}")
+
+    global_model_cid = get_latest_global_model_cid(api_base)
+    if global_model_cid:
+        print(f"   Global model CID  : {global_model_cid[:30]}…")
+    else:
+        print("   Global model CID  : (none – first round)")
+
+    client_updates = get_client_updates_for_round(api_base, agg_round)
+    print(f"   Client updates    : {len(client_updates)} for round {agg_round}")
+
+    if not client_updates:
+        print("\n⚠️  No client updates found for this round. Nothing to aggregate.")
+        return None
+
+    # ── 2. Download models from IPFS ──────────────────────────────────────────
+    print("\n📥 STEP 2 – Downloading models from IPFS…")
+    os.makedirs(MODEL_DIR, exist_ok=True)
+
+    # Download the current global model (as the base)
+    base_model_path = os.path.join(MODEL_DIR, "Central_model.json")
+    if global_model_cid:
+        print(f"\n   📦 Global model (base):")
+        download_from_ipfs(global_model_cid, base_model_path)
+    else:
+        # Check if a local base model exists
+        if not os.path.exists(base_model_path):
+            raise FileNotFoundError(
+                f"No global model CID on-chain and no local base model at {base_model_path}. "
+                "Cannot aggregate without a base model."
+            )
+        print(f"   ℹ️  Using local base model: {base_model_path}")
+
+    # Download client histogram / model files
+    client_paths = []
+    print(f"\n   📦 Client updates ({len(client_updates)}):")
+    for i, update in enumerate(client_updates, 1):
+        cid = update.get("ipfsCID") or update.get("cid") or ""
+        node = update.get("nodeAddress", f"client_{i}")
+        meta = update.get("metadata", "")
+        print(f"\n   [{i}] Node: {node}  |  CID: {cid[:20]}…  |  meta: {meta}")
+
+        if not cid:
+            print("       ⚠️  No CID – skipping")
+            continue
+
+        dest = os.path.join(MODEL_DIR, f"client_{i}_{cid[:8]}.json")
+        try:
+            download_from_ipfs(cid, dest)
+            client_paths.append(dest)
+        except Exception as exc:
+            print(f"       ❌ Download failed: {exc}")
+
+    if not client_paths:
+        raise RuntimeError("All client downloads failed. Cannot aggregate.")
+
+    # ── 3. Aggregate ──────────────────────────────────────────────────────────
+    print("\n⚙️  STEP 3 – Running FedAvg aggregation…")
+    agg_histograms = aggregate_histograms_fedavg(client_paths)
+
+    global_model_out = os.path.join(MODEL_DIR, "global_model.json")
+    build_global_model(agg_histograms, base_model_path, global_model_out)
+
+    # ── 4. Upload & register on-chain (admin) ─────────────────────────────────
+    print("\n📤 STEP 4 – Uploading aggregated model & registering on-chain…")
+    result = upload_and_register_global_model(api_base, global_model_out)
+
+    # ── Summary ───────────────────────────────────────────────────────────────
+    _sep("═")
+    print("✅  AGGREGATION COMPLETE")
+    _sep("═")
+    print(f"   Round aggregated  : {agg_round}")
+    print(f"   Clients included  : {agg_histograms['num_clients']}")
+    print(f"   Total samples     : {agg_histograms['total_samples']}")
+    print(f"   New global CID    : {result.get('cid')}")
+    print(f"   Tx Hash           : {result.get('txHash')}")
+    print(f"   Explorer          : {result.get('explorer')}")
+    _sep("═")
+
+    return result
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Entry point
+# ══════════════════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
-    print("\n" + "=" * 70)
-    print("🚀 FEDERATED LEARNING AGGREGATION SERVER")
-    print("=" * 70)
+    parser = argparse.ArgumentParser(
+        description="FedShield – Admin Aggregation Script"
+    )
+    parser.add_argument(
+        "--api",
+        default=BLOCKCHAIN_API,
+        help=f"Blockchain API base URL (default: {BLOCKCHAIN_API})",
+    )
+    parser.add_argument(
+        "--round",
+        type=int,
+        default=None,
+        help="Round number to aggregate (default: current round from contract)",
+    )
+    args = parser.parse_args()
 
-    if BLOCKCHAIN_ENABLED:
-        print("🔗 Blockchain connector: ENABLED (Polygon Amoy)")
-    else:
-        print(f"⚠️  Blockchain connector: DISABLED ({_bc_err_msg})")
-
-    # TRUE FEDERATED LEARNING: Aggregate using histograms
     try:
-        global_model, new_cid = federated_averaging_aggregation(
-            model_folder="model",
-            output_path="model/global_model.json",
-            use_histograms=True,
-        )
-        print("\n✅ Federated aggregation complete!")
-        if new_cid:
-            print(f"🔗 New global model CID (on-chain): {new_cid}")
-            print(f"   🌐 https://gateway.pinata.cloud/ipfs/{new_cid}")
-            print("📝 blockchain.txt updated with new CID")
-        else:
-            print("📊 Global model saved locally (on-chain registration skipped)")
-    except FileNotFoundError as e:
-        print(f"\n⚠️  {e}")
-        print("\nℹ️  Make sure clients have computed and saved their histograms first.")
-        print("   Run client.py on each client before aggregation.")
+        run_aggregation(api_base=args.api, target_round=args.round)
+    except KeyboardInterrupt:
+        print("\n⚠️  Interrupted by user.")
+        sys.exit(1)
+    except Exception as exc:
+        print(f"\n❌ Aggregation failed: {exc}")
+        sys.exit(1)
