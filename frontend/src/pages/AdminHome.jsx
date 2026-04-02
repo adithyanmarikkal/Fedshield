@@ -9,38 +9,57 @@ const ago = (ts) => {
     if (d < 86400) return `${Math.floor(d / 3600)}h ago`; return new Date(ts * 1000).toLocaleDateString()
 }
 
+// ── Shared icon ──────────────────────────────────────────────────────────────
+const LogoIcon = () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent-2)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+    </svg>
+)
+
+// ── Navbar ───────────────────────────────────────────────────────────────────
 function Navbar({ tab, setTab, account, onLogout }) {
     const tabs = ['Node Management', 'Verify Client Updates', 'Aggregation']
     return (
-        <nav style={{ position: 'sticky', top: 0, zIndex: 50, backdropFilter: 'blur(22px) saturate(190%)', WebkitBackdropFilter: 'blur(22px) saturate(190%)', background: 'rgba(6,10,18,0.85)', borderBottom: '1px solid var(--border)' }}>
-            <div style={{ maxWidth: 1160, margin: '0 auto', padding: '0 1.5rem', height: 62, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                    <span style={{ fontSize: '1.15rem', fontWeight: 900, background: 'linear-gradient(135deg,#f43f5e,#ec4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>⬡ FedShield Admin</span>
+        <nav style={{
+            position: 'sticky', top: 0, zIndex: 50,
+            background: 'rgba(11,17,32,0.9)',
+            borderBottom: '1px solid var(--border)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+        }}>
+            <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 1.5rem', height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <LogoIcon />
+                        <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-1)', letterSpacing: '-0.02em' }}>FedShield</span>
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-3)', marginLeft: 2 }}>Admin</span>
+                    </div>
                     <div className="tab-bar">
-                        {tabs.map(t => <button key={t} className={`tab-btn${tab === t ? ' active' : ''}`} onClick={() => setTab(t)} style={tab === t ? { background: 'rgba(244,63,94,0.15)', color: '#f43f5e' } : {}}>{t}</button>)}
+                        {tabs.map(t => (
+                            <button key={t} className={`tab-btn${tab === t ? ' active' : ''}`} onClick={() => setTab(t)}>{t}</button>
+                        ))}
                     </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem' }}>
-                    <span className="badge badge-accent" style={{ background: 'rgba(244,63,94,0.15)', color: '#f43f5e', border: '1px solid rgba(244,63,94,0.3)' }}>👑 Admin</span>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', borderRadius: 8, padding: '0.35rem 0.75rem' }}>
-                        <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 6px #22c55e' }} />
-                        <span style={{ fontSize: '0.74rem', fontFamily: 'monospace', color: 'var(--text-2)' }}>{short(account)}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                    <span className="badge badge-warning">Admin</span>
+                    <div className="wallet-badge">
+                        <div className="pulse-dot" />
+                        <span style={{ fontSize: '0.72rem', fontFamily: 'monospace', color: 'var(--text-2)' }}>{short(account)}</span>
                     </div>
-                    <button className="btn btn-ghost" onClick={onLogout} style={{ padding: '0.38rem 0.85rem', fontSize: '0.76rem' }}>Disconnect</button>
+                    <button className="btn btn-ghost" onClick={onLogout} style={{ padding: '0.35rem 0.75rem', fontSize: '0.78rem' }}>Disconnect</button>
                 </div>
             </div>
         </nav>
     )
 }
 
+// ── Node Management ──────────────────────────────────────────────────────────
 function NodeManagementTab() {
     const [address, setAddress] = useState('')
-    const [action, setAction] = useState('authorize') // 'authorize' or 'revoke'
+    const [action, setAction] = useState('authorize')
     const [loading, setLoading] = useState(false)
     const [result, setResult] = useState(null)
     const [error, setError] = useState('')
-
-    // Node list state
     const [nodes, setNodes] = useState([])
     const [nodesLoading, setNodesLoading] = useState(true)
 
@@ -59,7 +78,6 @@ function NodeManagementTab() {
         if (!address) return setError('Address required')
         if (address.length !== 42 || !address.startsWith('0x')) return setError('Invalid Ethereum address format.')
         setError(''); setResult(null); setLoading(true)
-
         try {
             const endpoint = action === 'authorize' ? '/authorize-node' : '/revoke-node'
             const res = await fetch(`${API}${endpoint}`, {
@@ -71,53 +89,88 @@ function NodeManagementTab() {
             if (!res.ok) throw new Error(data.error || 'Request failed')
             setResult({ ...data, actionType: action })
             setAddress('')
-            // Refresh node list after successful action
             fetchNodes()
         } catch (e) {
             setError(e.message)
         } finally { setLoading(false) }
     }
 
+    const isAuthorize = action === 'authorize'
+
     return (
         <div className="fade-up">
-            <div style={{ marginBottom: '2.5rem' }}>
-                <h1 style={{ marginBottom: '0.6rem' }}>Client Node Management</h1>
-                <p style={{ maxWidth: 540, fontSize: '0.94rem' }}>
-                    Only authorised addresses can record client updates on the blockchain. Add or remove nodes carefully.
+            <div style={{ marginBottom: '2rem' }}>
+                <h1 style={{ marginBottom: '0.4rem' }}>Node Management</h1>
+                <p style={{ maxWidth: 520, fontSize: '0.875rem', margin: 0 }}>
+                    Only authorized addresses can record client updates on the blockchain. Add or remove nodes carefully.
                 </p>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem', marginBottom: '2rem' }}>
-                <div className="glass" style={{ padding: '2rem' }}>
-                    <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
-                        <button className={`btn ${action === 'authorize' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setAction('authorize')} style={action === 'authorize' ? { background: '#10b981', color: 'white', borderColor: '#10b981' } : { flex: 1 }}>Authorize Node +</button>
-                        <button className={`btn ${action === 'revoke' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setAction('revoke')} style={action === 'revoke' ? { background: '#f43f5e', color: 'white', borderColor: '#f43f5e' } : { flex: 1 }}>Revoke Node ✕</button>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                {/* Form card */}
+                <div className="glass" style={{ padding: '1.75rem' }}>
+                    {/* Action toggle */}
+                    <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', padding: '0.25rem' }}>
+                        <button
+                            onClick={() => setAction('authorize')}
+                            style={{ flex: 1, padding: '0.45rem', borderRadius: 'calc(var(--r-sm) - 2px)', border: 'none', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s', background: isAuthorize ? 'rgba(34,197,94,0.12)' : 'transparent', color: isAuthorize ? 'var(--success)' : 'var(--text-2)' }}
+                        >
+                            Authorize Node
+                        </button>
+                        <button
+                            onClick={() => setAction('revoke')}
+                            style={{ flex: 1, padding: '0.45rem', borderRadius: 'calc(var(--r-sm) - 2px)', border: 'none', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s', background: !isAuthorize ? 'rgba(239,68,68,0.12)' : 'transparent', color: !isAuthorize ? 'var(--danger)' : 'var(--text-2)' }}
+                        >
+                            Revoke Node
+                        </button>
                     </div>
 
-                    <div style={{ marginBottom: '1.5rem' }}>
-                        <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-2)', marginBottom: '0.5rem' }}>Node Ethereum Address</label>
-                        <input type="text" placeholder="0x..." value={address} onChange={e => { setAddress(e.target.value); setError('') }} style={{ width: '100%', padding: '0.8rem 1rem', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', color: 'var(--text-1)', outline: 'none', fontFamily: 'monospace' }} />
+                    <div style={{ marginBottom: '1.25rem' }}>
+                        <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-2)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                            Node Ethereum Address
+                        </label>
+                        <input
+                            type="text"
+                            placeholder="0x…"
+                            value={address}
+                            onChange={e => { setAddress(e.target.value); setError('') }}
+                            style={{ fontFamily: 'monospace', fontSize: '0.84rem' }}
+                        />
                     </div>
 
-                    {error && <div className="alert-error" style={{ marginBottom: '1.5rem' }}>⚠️ {error}</div>}
+                    {error && <div className="alert-error" style={{ marginBottom: '1.25rem' }}>{error}</div>}
 
-                    <button className="btn btn-primary" onClick={submit} disabled={loading || !address} style={{ width: '100%', justifyContent: 'center', background: action === 'authorize' ? '#10b981' : '#f43f5e', borderColor: action === 'authorize' ? '#10b981' : '#f43f5e', color: 'white' }}>
-                        {loading ? <><div className="spinner" style={{ width: 15, height: 15 }} /> Processing Tx…</> : <>{action === 'authorize' ? 'Submit Authorization Tx' : 'Submit Revocation Tx'}</>}
+                    <button
+                        className="btn"
+                        onClick={submit}
+                        disabled={loading || !address}
+                        style={{
+                            width: '100%', justifyContent: 'center',
+                            background: isAuthorize ? 'rgba(34,197,94,0.12)' : 'rgba(239,68,68,0.10)',
+                            color: isAuthorize ? 'var(--success)' : 'var(--danger)',
+                            border: `1px solid ${isAuthorize ? 'rgba(34,197,94,0.25)' : 'rgba(239,68,68,0.22)'}`,
+                            fontWeight: 600,
+                        }}
+                    >
+                        {loading ? <><div className="spinner" style={{ width: 14, height: 14 }} />Processing…</> : isAuthorize ? 'Authorize Node' : 'Revoke Node'}
                     </button>
                 </div>
 
+                {/* Result panel */}
                 <div>
                     {result && (
-                        <div className="glass fade-up" style={{ padding: '1.6rem', borderColor: result.actionType === 'authorize' ? 'rgba(16,185,129,0.3)' : 'rgba(244,63,94,0.3)' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '1.2rem' }}>
-                                <span style={{ fontSize: '1.6rem' }}>✅</span>
-                                <div><h3 style={{ color: result.actionType === 'authorize' ? '#10b981' : '#f43f5e', marginBottom: 2 }}>{result.actionType === 'authorize' ? 'Node Authorized' : 'Node Revoked'}</h3><span style={{ fontSize: '0.73rem', color: 'var(--text-2)' }}>Tx Confirmed via Polygon Amoy</span></div>
+                        <div className="glass fade-up" style={{ padding: '1.5rem', borderColor: result.actionType === 'authorize' ? 'rgba(34,197,94,0.22)' : 'rgba(239,68,68,0.22)' }}>
+                            <div style={{ marginBottom: '1.25rem' }}>
+                                <h3 style={{ color: result.actionType === 'authorize' ? 'var(--success)' : 'var(--danger)', fontSize: '0.95rem', marginBottom: 4 }}>
+                                    {result.actionType === 'authorize' ? 'Node Authorized' : 'Node Revoked'}
+                                </h3>
+                                <span style={{ fontSize: '0.74rem', color: 'var(--text-2)' }}>Transaction confirmed on Polygon Amoy</span>
                             </div>
                             {[['Target Address', short(result.address), null], ['Transaction', result.txHash, result.explorer], ['Block', `#${result.blockNumber}`, null]].map(([label, val, link]) => (
-                                <div key={label} style={{ padding: '0.7rem 0', borderBottom: '1px solid var(--border)' }}>
-                                    <div style={{ fontSize: '0.64rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-3)', marginBottom: 4 }}>{label}</div>
-                                    {link ? <a href={link} target="_blank" rel="noreferrer" style={{ fontFamily: 'monospace', fontSize: '0.76rem', wordBreak: 'break-all' }}>{val}</a>
-                                        : <span style={{ fontFamily: 'monospace', fontSize: '0.76rem', wordBreak: 'break-all' }}>{val}</span>}
+                                <div key={label} style={{ padding: '0.65rem 0', borderBottom: '1px solid var(--border)' }}>
+                                    <div className="section-label" style={{ marginBottom: 4 }}>{label}</div>
+                                    {link ? <a href={link} target="_blank" rel="noreferrer" style={{ fontFamily: 'monospace', fontSize: '0.77rem', wordBreak: 'break-all' }}>{val}</a>
+                                        : <span style={{ fontFamily: 'monospace', fontSize: '0.77rem', wordBreak: 'break-all' }}>{val}</span>}
                                 </div>
                             ))}
                         </div>
@@ -127,29 +180,29 @@ function NodeManagementTab() {
 
             {/* Authorized Nodes List */}
             <div className="glass fade-up" style={{ overflow: 'hidden' }}>
-                <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)', background: 'rgba(255,255,255,0.01)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <h3 style={{ fontSize: '0.9rem', margin: 0 }}>
-                        Registered Nodes <span style={{ padding: '2px 8px', borderRadius: 12, background: 'rgba(255,255,255,0.1)', fontSize: '0.75rem', marginLeft: 8 }}>{nodes.length}</span>
+                <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <h3 style={{ fontSize: '0.875rem', fontWeight: 600, margin: 0 }}>
+                        Registered Nodes
+                        <span style={{ marginLeft: 8, padding: '1px 7px', borderRadius: 999, background: 'rgba(255,255,255,0.07)', fontSize: '0.72rem', fontWeight: 500, color: 'var(--text-2)' }}>{nodes.length}</span>
                     </h3>
-                    <button className="btn btn-ghost" onClick={fetchNodes} style={{ padding: '0.35rem 0.7rem', fontSize: '0.74rem' }}>↻ Refresh</button>
+                    <button className="btn btn-ghost" onClick={fetchNodes} style={{ padding: '0.3rem 0.65rem', fontSize: '0.74rem' }}>Refresh</button>
                 </div>
                 {nodesLoading ? (
                     <div style={{ padding: '3rem', display: 'flex', justifyContent: 'center' }}><div className="spinner" style={{ width: 22, height: 22 }} /></div>
                 ) : nodes.length > 0 ? (
                     <div style={{ overflowX: 'auto' }}>
                         <table>
-                            <thead><tr><th>Status</th><th>Node Address</th><th>Last Tx</th></tr></thead>
+                            <thead><tr><th>Status</th><th>Node Address</th><th>Last Transaction</th></tr></thead>
                             <tbody>
                                 {nodes.map((n, i) => (
                                     <tr key={i}>
                                         <td>
                                             {n.authorized
-                                                ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 20, background: 'rgba(16,185,129,0.12)', color: '#10b981', fontSize: '0.74rem', fontWeight: 700 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} /> Active</span>
-                                                : <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px', borderRadius: 20, background: 'rgba(244,63,94,0.12)', color: '#f43f5e', fontSize: '0.74rem', fontWeight: 700 }}><span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f43f5e' }} /> Revoked</span>
-                                            }
+                                                ? <span className="badge badge-success">Active</span>
+                                                : <span className="badge badge-danger">Revoked</span>}
                                         </td>
-                                        <td><span style={{ fontFamily: 'monospace', fontSize: '0.78rem', color: 'var(--text-1)' }}>{n.address}</span></td>
-                                        <td><a href={n.explorer} target="_blank" rel="noreferrer" style={{ fontFamily: 'monospace', fontSize: '0.74rem' }}>{short(n.lastTxHash)}</a></td>
+                                        <td><span style={{ fontFamily: 'monospace', fontSize: '0.8rem' }}>{n.address}</span></td>
+                                        <td><a href={n.explorer} target="_blank" rel="noreferrer" style={{ fontFamily: 'monospace', fontSize: '0.76rem' }}>{short(n.lastTxHash)}</a></td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -157,8 +210,7 @@ function NodeManagementTab() {
                     </div>
                 ) : (
                     <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-3)' }}>
-                        <div style={{ fontSize: '1.8rem', marginBottom: '0.6rem' }}>🔒</div>
-                        <p>No nodes have been registered yet.</p>
+                        <p style={{ color: 'var(--text-3)' }}>No nodes have been registered yet.</p>
                     </div>
                 )}
             </div>
@@ -166,6 +218,7 @@ function NodeManagementTab() {
     )
 }
 
+// ── Verify Client Updates ────────────────────────────────────────────────────
 function VerifyClientUpdatesTab() {
     const [allUpdates, setAllUpdates] = useState([])
     const [loading, setLoading] = useState(true)
@@ -175,7 +228,6 @@ function VerifyClientUpdatesTab() {
         try {
             const rndRes = await fetch(`${API}/current-round`).then(r => r.json())
             const cr = rndRes.currentRound ?? 0
-            // Fetch updates for every round (0 through currentRound)
             const promises = []
             for (let r = 0; r <= cr; r++) {
                 promises.push(
@@ -186,7 +238,6 @@ function VerifyClientUpdatesTab() {
                 )
             }
             const results = await Promise.all(promises)
-            // Flatten and sort by timestamp descending (newest first)
             const flat = results.flat().sort((a, b) => b.timestamp - a.timestamp)
             setAllUpdates(flat)
         } catch (_) { setAllUpdates([]) } finally { setLoading(false) }
@@ -198,29 +249,32 @@ function VerifyClientUpdatesTab() {
         <div className="fade-up">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '2rem' }}>
                 <div>
-                    <h1 style={{ marginBottom: '0.6rem' }}>Verify Local Updates</h1>
-                    <p style={{ maxWidth: 540, fontSize: '0.94rem', margin: 0 }}>Review all local model submissions from participating nodes across all rounds.</p>
+                    <h1 style={{ marginBottom: '0.4rem' }}>Verify Client Updates</h1>
+                    <p style={{ maxWidth: 520, fontSize: '0.875rem', margin: 0 }}>Review all local model submissions from participating nodes across all rounds.</p>
                 </div>
-                <button className="btn btn-ghost" onClick={fetchAllUpdates} style={{ padding: '0.4rem 0.8rem', fontSize: '0.76rem' }}>↻ Refresh</button>
+                <button className="btn btn-ghost" onClick={fetchAllUpdates} style={{ padding: '0.38rem 0.75rem', fontSize: '0.78rem' }}>Refresh</button>
             </div>
 
             <div className="glass" style={{ overflow: 'hidden' }}>
-                <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid var(--border)', background: 'rgba(255,255,255,0.01)' }}>
-                    <h3 style={{ fontSize: '0.9rem', margin: 0 }}>All Client Submissions <span style={{ padding: '2px 8px', borderRadius: 12, background: 'rgba(255,255,255,0.1)', fontSize: '0.75rem', marginLeft: 8 }}>{allUpdates.length}</span></h3>
+                <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid var(--border)' }}>
+                    <h3 style={{ fontSize: '0.875rem', fontWeight: 600, margin: 0 }}>
+                        All Client Submissions
+                        <span style={{ marginLeft: 8, padding: '1px 7px', borderRadius: 999, background: 'rgba(255,255,255,0.07)', fontSize: '0.72rem', fontWeight: 500, color: 'var(--text-2)' }}>{allUpdates.length}</span>
+                    </h3>
                 </div>
                 {loading ? (
-                    <div style={{ padding: '4rem', display: 'flex', justifyContent: 'center' }}><div className="spinner" style={{ width: 25, height: 25 }} /></div>
+                    <div style={{ padding: '4rem', display: 'flex', justifyContent: 'center' }}><div className="spinner" style={{ width: 24, height: 24 }} /></div>
                 ) : allUpdates.length > 0 ? (
                     <div style={{ overflowX: 'auto' }}>
                         <table>
-                            <thead><tr><th>Round</th><th>Node Address</th><th>IPFS Hash (Local Weights)</th><th>Metadata</th><th>Submitted</th></tr></thead>
+                            <thead><tr><th>Round</th><th>Node Address</th><th>IPFS CID</th><th>Metadata</th><th>Submitted</th></tr></thead>
                             <tbody>
                                 {allUpdates.map((u, i) => (
                                     <tr key={i}>
-                                        <td><span className="badge badge-accent" style={{ fontSize: '0.72rem' }}>Round {u.round}</span></td>
-                                        <td><span style={{ fontFamily: 'monospace', fontSize: '0.78rem', color: 'var(--text-1)' }}>{u.nodeAddress}</span></td>
-                                        <td><a href={u.gateway} target="_blank" rel="noreferrer" style={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>{u.ipfsCID}</a></td>
-                                        <td><span className="badge" style={{ background: 'rgba(255,255,255,0.05)', color: 'var(--text-2)' }}>{u.metadata || 'None'}</span></td>
+                                        <td><span className="badge badge-accent">Round {u.round}</span></td>
+                                        <td><span style={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>{u.nodeAddress}</span></td>
+                                        <td><a href={u.gateway} target="_blank" rel="noreferrer" style={{ fontFamily: 'monospace', fontSize: '0.78rem' }}>{short(u.ipfsCID)}</a></td>
+                                        <td><span style={{ fontSize: '0.76rem', color: 'var(--text-2)' }}>{u.metadata || '—'}</span></td>
                                         <td style={{ color: 'var(--text-2)', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{ago(u.timestamp)}</td>
                                     </tr>
                                 ))}
@@ -228,10 +282,9 @@ function VerifyClientUpdatesTab() {
                         </table>
                     </div>
                 ) : (
-                    <div style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-3)' }}>
-                        <div style={{ fontSize: '2rem', marginBottom: '0.8rem' }}>📭</div>
-                        <p>No client updates have been submitted yet.</p>
-                        <p style={{ fontSize: '0.8rem', color: 'var(--text-3)', marginTop: '0.5rem' }}>Client nodes need to use the User Home → Upload Local Model flow to submit updates.</p>
+                    <div style={{ padding: '4rem', textAlign: 'center' }}>
+                        <p style={{ color: 'var(--text-3)', marginBottom: 6 }}>No client updates have been submitted yet.</p>
+                        <p style={{ fontSize: '0.8rem', color: 'var(--text-3)' }}>Clients need to use Upload Local Model to submit updates.</p>
                     </div>
                 )}
             </div>
@@ -239,52 +292,109 @@ function VerifyClientUpdatesTab() {
     )
 }
 
+// ── Aggregation ──────────────────────────────────────────────────────────────
 function AggregationTab() {
     const [running, setRunning] = useState(false)
-    const [result, setResult] = useState(false)
+    const [result, setResult] = useState(null)
 
-    const handleAggregate = () => {
+    const handleAggregate = async () => {
         setRunning(true)
-        // Simulate an aggregation task running via a python subprocess
-        setTimeout(() => {
+        setResult(null)
+        try {
+            const res = await fetch(`${API}/run-aggregation`, { method: 'POST' })
+            const data = await res.json()
+            setResult(data)
+        } catch (e) {
+            setResult({ success: false, logs: [], error: e.message })
+        } finally {
             setRunning(false)
-            setResult(true)
-        }, 2500)
+        }
     }
 
     return (
         <div className="fade-up">
-            <div style={{ marginBottom: '2.5rem' }}>
-                <h1 style={{ marginBottom: '0.6rem' }}>Global Model Aggregation</h1>
-                <p style={{ maxWidth: 540, fontSize: '0.94rem' }}>
-                    Trigger the Python FedAvg algorithm to aggregate local IPFS weights, create a new global model, and advance the blockchain round.
+            <div style={{ marginBottom: '2rem' }}>
+                <h1 style={{ marginBottom: '0.4rem' }}>Global Model Aggregation</h1>
+                <p style={{ maxWidth: 520, fontSize: '0.875rem', margin: 0 }}>
+                    Trigger the FedAvg algorithm to aggregate local IPFS weights, create a new global model, and advance the blockchain round.
                 </p>
             </div>
 
-            <div className="glass" style={{ padding: '3rem', textAlign: 'center', maxWidth: 600, margin: '0 auto' }}>
-                <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'linear-gradient(135deg,rgba(244,63,94,0.2),rgba(236,72,153,0.1))', border: '1px solid rgba(244,63,94,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem', fontSize: '2.5rem' }}>
-                    🧠
+            <div className="glass" style={{ padding: '2.5rem', maxWidth: 620, margin: '0 auto' }}>
+                {/* Icon */}
+                <div style={{
+                    width: 56, height: 56, borderRadius: 14, margin: '0 auto 1.5rem',
+                    background: 'rgba(99,102,241,0.10)', border: '1px solid rgba(99,102,241,0.22)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent-2)" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                        <circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                    </svg>
                 </div>
-                <h2 style={{ fontSize: '1.4rem', marginBottom: '0.8rem' }}>Run FedAvg</h2>
-                <p style={{ color: 'var(--text-2)', marginBottom: '2rem', fontSize: '0.9rem' }}>
-                    This will execute `main.py` in the backend environment. It calculates averaged `.json` weights and posts the new CID permanently on-chain.
-                </p>
-                {result ? (
-                    <div className="alert-error" style={{ background: 'rgba(16,185,129,0.1)', borderColor: 'rgba(16,185,129,0.3)', color: '#10b981', display: 'flex', flexDirection: 'column', gap: 10 }}>
-                        <div style={{ fontWeight: 'bold' }}>✅ Aggregation script triggered!</div>
-                        <div style={{ fontSize: '0.8rem' }}>(Disclaimer: Backend Python linkage placeholder - check python logs for details)</div>
-                        <button className="btn btn-ghost" onClick={() => setResult(false)} style={{ alignSelf: 'center', marginTop: 10 }}>Reset</button>
-                    </div>
-                ) : (
-                    <button className="btn btn-primary" style={{ padding: '0.8rem 2rem', fontSize: '1rem', background: '#f43f5e', borderColor: '#f43f5e', color: 'white' }} onClick={handleAggregate} disabled={running}>
-                        {running ? <><div className="spinner" /> ⚙️ Aggregating nodes...</> : '🚀 Trigger Aggregation Sequence'}
+
+                <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+                    <h2 style={{ fontSize: '1.2rem', marginBottom: '0.5rem' }}>Run FedAvg</h2>
+                    <p style={{ fontSize: '0.875rem', color: 'var(--text-2)', margin: 0 }}>
+                        Executes <code>aggregation.py</code> — fetches client CIDs, runs FedAvg, uploads the global model to IPFS, and registers it on-chain.
+                    </p>
+                </div>
+
+                {!running && !result && (
+                    <button
+                        className="btn btn-primary"
+                        style={{ width: '100%', justifyContent: 'center', padding: '0.75rem', fontSize: '0.9rem', fontWeight: 600 }}
+                        onClick={handleAggregate}
+                    >
+                        Run Aggregation
                     </button>
+                )}
+
+                {running && (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.875rem' }}>
+                        <div className="spinner" style={{ width: 28, height: 28 }} />
+                        <span style={{ fontSize: '0.875rem', color: 'var(--text-2)' }}>Running aggregation.py — this may take a minute</span>
+                    </div>
+                )}
+
+                {result && (
+                    <div>
+                        <div className={result.success ? 'alert-success' : 'alert-error'} style={{ marginBottom: '1rem' }}>
+                            <strong>{result.success ? 'Aggregation completed successfully' : 'Aggregation failed'}</strong>
+                            {result.error && <div style={{ marginTop: 4, fontSize: '0.8rem' }}>{result.error}</div>}
+                        </div>
+
+                        {result.logs && result.logs.length > 0 && (
+                            <div style={{ marginBottom: '1.25rem' }}>
+                                <div className="section-label" style={{ marginBottom: '0.5rem' }}>Script Output</div>
+                                <pre style={{
+                                    background: 'rgba(0,0,0,0.35)',
+                                    border: '1px solid var(--border)',
+                                    borderRadius: 'var(--r-sm)',
+                                    padding: '1rem',
+                                    fontSize: '0.72rem',
+                                    fontFamily: 'ui-monospace, monospace',
+                                    color: 'var(--success)',
+                                    maxHeight: 300,
+                                    overflowY: 'auto',
+                                    whiteSpace: 'pre-wrap',
+                                    wordBreak: 'break-all',
+                                }}>
+                                    {result.logs.join('\n')}
+                                </pre>
+                            </div>
+                        )}
+
+                        <button className="btn btn-ghost" onClick={() => setResult(null)} style={{ width: '100%', justifyContent: 'center' }}>
+                            Run Again
+                        </button>
+                    </div>
                 )}
             </div>
         </div>
     )
 }
 
+// ── Root ─────────────────────────────────────────────────────────────────────
 export default function AdminHome() {
     const navigate = useNavigate()
     const account = localStorage.getItem('account') || ''
@@ -295,8 +405,7 @@ export default function AdminHome() {
     return (
         <div style={{ minHeight: '100vh', paddingBottom: '4rem' }}>
             <Navbar tab={tab} setTab={setTab} account={account} onLogout={logout} />
-
-            <div style={{ maxWidth: 1160, margin: '0 auto', padding: '3rem 1.5rem' }}>
+            <div style={{ maxWidth: 1200, margin: '0 auto', padding: '2.5rem 1.5rem' }}>
                 {tab === 'Node Management' && <NodeManagementTab />}
                 {tab === 'Verify Client Updates' && <VerifyClientUpdatesTab />}
                 {tab === 'Aggregation' && <AggregationTab />}

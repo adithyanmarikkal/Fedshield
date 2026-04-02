@@ -22,6 +22,7 @@ const cors = require("cors");
 const multer = require("multer");
 const path = require("path");
 const fs = require("fs");
+const { spawn } = require("child_process");
 
 const blockchainRoutes = require("./routes/blockchain");
 const ipfsRoutes = require("./routes/ipfs");
@@ -73,6 +74,37 @@ app.get("/api/health", (req, res) => {
         ready: allSet,
         env: status,
         contractAddress: process.env.CONTRACT_ADDRESS || "",
+    });
+});
+
+// ── Run aggregation.py ────────────────────────────────────────────────────────
+app.post("/api/run-aggregation", (req, res) => {
+    const scriptPath = path.resolve(__dirname, "..", "aggregation.py");
+    const cwd = path.resolve(__dirname, "..");
+    console.log(`▶️  Spawning: python3 ${scriptPath}`);
+
+    const logs = [];
+    const proc = spawn("python3", [scriptPath], { cwd, env: process.env });
+
+    proc.stdout.on("data", (d) => {
+        const lines = d.toString().split("\n").filter(Boolean);
+        lines.forEach(l => { console.log("[agg]", l); logs.push(l); });
+    });
+    proc.stderr.on("data", (d) => {
+        const lines = d.toString().split("\n").filter(Boolean);
+        lines.forEach(l => { console.error("[agg err]", l); logs.push(l); });
+    });
+
+    proc.on("close", (code) => {
+        if (code === 0) {
+            res.json({ success: true, logs });
+        } else {
+            res.status(500).json({ success: false, code, logs });
+        }
+    });
+
+    proc.on("error", (err) => {
+        res.status(500).json({ success: false, error: err.message, logs });
     });
 });
 

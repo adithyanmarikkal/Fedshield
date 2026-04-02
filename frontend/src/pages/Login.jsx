@@ -41,82 +41,82 @@ export default function Login() {
     }
 
     return (
-        <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem', position: 'relative' }}>
-
-            {/* Decorative blobs */}
-            <div aria-hidden style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0, overflow: 'hidden' }}>
-                <div style={{ position: 'absolute', width: 700, height: 700, borderRadius: '50%', background: 'radial-gradient(circle,rgba(99,102,241,0.13),transparent 70%)', top: '-25%', left: '0%', filter: 'blur(70px)' }} />
-                <div style={{ position: 'absolute', width: 500, height: 500, borderRadius: '50%', background: 'radial-gradient(circle,rgba(139,92,246,0.10),transparent 70%)', bottom: '-15%', right: '-5%', filter: 'blur(60px)' }} />
-                {['10%,20%', '85%,15%', '70%,80%', '20%,75%'].map((pos, i) => {
-                    const [left, top] = pos.split(',')
-                    return <div key={i} style={{ position: 'absolute', left, top, width: 40 + i * 15, height: 40 + i * 15, border: '1px solid rgba(99,102,241,0.15)', borderRadius: 10, transform: `rotate(${i * 22}deg)`, animation: `floatY ${3 + i * 0.7}s ease-in-out infinite`, animationDelay: `${i * 0.5}s` }} />
-                })}
-            </div>
-
-            {/* Card */}
-            <div className="glass fade-up" style={{ position: 'relative', zIndex: 1, width: '100%', maxWidth: 460, padding: '3rem 2.6rem', textAlign: 'center' }}>
+        <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
+            <div className="glass fade-up" style={{ width: '100%', maxWidth: 420, padding: '2.5rem 2rem' }}>
 
                 {/* Logo */}
-                <div style={{ marginBottom: '2.2rem' }}>
-                    <div style={{ width: 72, height: 72, borderRadius: 20, margin: '0 auto 1.3rem', background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2.1rem', boxShadow: '0 0 42px rgba(99,102,241,0.5)' }}>⬡</div>
-                    <h1 style={{ fontSize: '1.75rem', marginBottom: 6 }}>FedShield</h1>
-                    <p style={{ fontSize: '0.88rem', margin: 0 }}>Federated Learning Blockchain Registry</p>
+                <div style={{ marginBottom: '2rem', textAlign: 'center' }}>
+                    <div style={{
+                        width: 52, height: 52, borderRadius: 12,
+                        margin: '0 auto 1rem',
+                        background: 'rgba(99,102,241,0.12)',
+                        border: '1px solid rgba(99,102,241,0.25)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--accent-2)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                        </svg>
+                    </div>
+                    <h1 style={{ fontSize: '1.45rem', marginBottom: 4 }}>FedShield</h1>
+                    <p style={{ fontSize: '0.84rem', margin: 0 }}>Federated Learning Blockchain Registry</p>
                 </div>
 
                 <div className="divider" />
 
                 {/* Role info */}
-                <div style={{ display: 'flex', gap: '0.6rem', marginBottom: '1.8rem' }}>
+                <div style={{ display: 'flex', gap: '0.6rem', marginBottom: '1.5rem' }}>
                     {[
-                        { icon: '👑', label: 'Admin', desc: 'Contract owner — full control', color: '#f59e0b' },
-                        { icon: '👤', label: 'User', desc: 'Any wallet — view & monitor', color: '#6366f1' },
-                    ].map(({ icon, label, desc, color }) => (
-                        <div key={label} style={{ flex: 1, padding: '0.9rem', borderRadius: 'var(--r-sm)', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)', textAlign: 'left' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
-                                <span style={{ fontSize: '1.1rem' }}>{icon}</span>
-                                <span style={{ fontSize: '0.82rem', fontWeight: 700, color }}>{label}</span>
-                            </div>
-                            <div style={{ fontSize: '0.72rem', color: 'var(--text-2)' }}>{desc}</div>
+                        { label: 'Admin', desc: 'Contract owner — full control', color: '#f59e0b' },
+                        { label: 'Participant', desc: 'Any wallet — view & monitor', color: 'var(--accent-2)' },
+                    ].map(({ label, desc, color }) => (
+                        <div key={label} style={{ flex: 1, padding: '0.875rem', borderRadius: 'var(--r-md)', background: 'rgba(255,255,255,0.025)', border: '1px solid var(--border)' }}>
+                            <div style={{ fontSize: '0.78rem', fontWeight: 700, color, marginBottom: 3 }}>{label}</div>
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-2)', lineHeight: 1.4 }}>{desc}</div>
                         </div>
                     ))}
                 </div>
 
                 {/* Feature list */}
-                <div className="stagger" style={{ textAlign: 'left', marginBottom: '2rem', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                <div style={{ marginBottom: '1.75rem', display: 'flex', flexDirection: 'column', gap: '0.45rem' }}>
                     {[
-                        ['☁️', 'IPFS via Pinata', 'Model files pinned permanently'],
-                        ['🔗', 'On-chain Registry', 'CIDs stored on Polygon Amoy'],
-                        ['🔒', 'Role Detection', 'Owner auto-identified from contract'],
-                    ].map(([icon, title, sub]) => (
-                        <div key={title} className="fade-up" style={{ display: 'flex', alignItems: 'flex-start', gap: '0.85rem', padding: '0.75rem 0.9rem', borderRadius: 'var(--r-sm)', background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border)' }}>
-                            <span style={{ fontSize: '1.2rem', lineHeight: 1.2, flexShrink: 0 }}>{icon}</span>
-                            <div><div style={{ fontSize: '0.86rem', fontWeight: 600, marginBottom: 2 }}>{title}</div><div style={{ fontSize: '0.73rem', color: 'var(--text-2)' }}>{sub}</div></div>
+                        ['IPFS via Pinata', 'Model files pinned permanently'],
+                        ['On-chain Registry', 'CIDs stored on Polygon Amoy'],
+                        ['Role Detection', 'Owner auto-identified from contract'],
+                    ].map(([title, sub]) => (
+                        <div key={title} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.65rem 0.875rem', borderRadius: 'var(--r-sm)', background: 'rgba(255,255,255,0.025)', border: '1px solid var(--border)' }}>
+                            <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--accent-2)', flexShrink: 0 }} />
+                            <div>
+                                <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-1)', marginBottom: 1 }}>{title}</div>
+                                <div style={{ fontSize: '0.72rem', color: 'var(--text-2)' }}>{sub}</div>
+                            </div>
                         </div>
                     ))}
                 </div>
 
-                {error && <div className="alert-error fade-in" style={{ marginBottom: '1.2rem', textAlign: 'left' }}>⚠️ {error}</div>}
+                {error && <div className="alert-error fade-in" style={{ marginBottom: '1rem' }}>{error}</div>}
 
                 <button
                     id="connect-wallet-btn"
                     className="btn btn-primary"
                     onClick={connect}
                     disabled={status === 'connecting' || status === 'done'}
-                    style={{ width: '100%', justifyContent: 'center', padding: '0.95rem', fontSize: '1rem' }}
+                    style={{ width: '100%', justifyContent: 'center', padding: '0.75rem', fontSize: '0.9rem', fontWeight: 600 }}
                 >
-                    {status === 'connecting' ? <><div className="spinner" style={{ width: 18, height: 18 }} /> Connecting…</>
-                        : status === 'done' ? <>✅ Connected! Redirecting…</>
-                            : <><span style={{ fontSize: '1.1rem' }}>🦊</span> Connect with MetaMask</>}
+                    {status === 'connecting'
+                        ? <><div className="spinner" style={{ width: 16, height: 16 }} /> Connecting…</>
+                        : status === 'done'
+                            ? 'Connected — Redirecting…'
+                            : 'Connect with MetaMask'}
                 </button>
 
-                <p style={{ marginTop: '1.2rem', fontSize: '0.73rem', color: 'var(--text-3)' }}>
+                <div style={{ marginTop: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}>
+                    <div className="pulse-dot" />
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-3)' }}>Polygon Amoy Testnet</span>
+                </div>
+
+                <p style={{ marginTop: '0.75rem', textAlign: 'center', fontSize: '0.72rem', color: 'var(--text-3)' }}>
                     Your role is determined automatically by your wallet address
                 </p>
-
-                <div style={{ marginTop: '1.2rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                    <div className="pulse-dot" />
-                    <span style={{ fontSize: '0.72rem', color: 'var(--text-2)' }}>Polygon Amoy Testnet</span>
-                </div>
             </div>
         </div>
     )

@@ -11,48 +11,56 @@ const ago = (ts) => {
     return new Date(ts * 1000).toLocaleDateString()
 }
 
-/* ── Navbar ──────────────────────────────────────────────────── */
+/* ── Shared Logo SVG ────────────────────────────────────────── */
+const LogoIcon = () => (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent-2)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+    </svg>
+)
+
+/* ── Navbar ─────────────────────────────────────────────────── */
 function Navbar({ tab, setTab, account, isOwner, onLogout }) {
     const tabs = ['Overview', 'Upload', 'History', 'Clients', ...(isOwner ? ['Nodes'] : [])]
     return (
         <nav style={{
             position: 'sticky', top: 0, zIndex: 50,
-            backdropFilter: 'blur(22px) saturate(190%)',
-            WebkitBackdropFilter: 'blur(22px) saturate(190%)',
-            background: 'rgba(6,10,18,0.82)',
+            background: 'rgba(11,17,32,0.9)',
             borderBottom: '1px solid var(--border)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
         }}>
-            <div style={{ maxWidth: 1160, margin: '0 auto', padding: '0 1.5rem', height: 62, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-                    <span style={{ fontSize: '1.15rem', fontWeight: 900, background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', whiteSpace: 'nowrap' }}>
-                        ⬡ FedShield
-                    </span>
+            <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 1.5rem', height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <LogoIcon />
+                        <span style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--text-1)', letterSpacing: '-0.02em' }}>FedShield</span>
+                    </div>
                     <div className="tab-bar">
                         {tabs.map(t => (
                             <button key={t} className={`tab-btn${tab === t ? ' active' : ''}`} onClick={() => setTab(t)}>{t}</button>
                         ))}
                     </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.7rem', flexShrink: 0 }}>
-                    {isOwner && <span className="badge badge-accent">👑 Owner</span>}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', borderRadius: 8, padding: '0.35rem 0.75rem' }}>
-                        <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 6px #22c55e' }} />
-                        <span style={{ fontSize: '0.74rem', fontFamily: 'monospace', color: 'var(--text-2)' }}>{short(account)}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexShrink: 0 }}>
+                    {isOwner && <span className="badge badge-warning">Owner</span>}
+                    <div className="wallet-badge">
+                        <div className="pulse-dot" />
+                        <span style={{ fontSize: '0.72rem', fontFamily: 'monospace', color: 'var(--text-2)' }}>{short(account)}</span>
                     </div>
-                    <button className="btn btn-ghost" onClick={onLogout} style={{ padding: '0.38rem 0.85rem', fontSize: '0.76rem' }}>Disconnect</button>
+                    <button className="btn btn-ghost" onClick={onLogout} style={{ padding: '0.35rem 0.75rem', fontSize: '0.78rem' }}>Disconnect</button>
                 </div>
             </div>
         </nav>
     )
 }
 
-/* ── Step progress bar ───────────────────────────────────────── */
+/* ── Step progress bar ────────────────────────────────────────── */
 function StepBar({ step }) {
     const steps = [
-        { id: 0, icon: '📁', label: 'Select File' },
-        { id: 1, icon: '☁️', label: 'IPFS Upload' },
-        { id: 2, icon: '🔗', label: 'On-chain Tx' },
-        { id: 3, icon: '✅', label: 'Complete' },
+        { id: 0, label: 'Select File' },
+        { id: 1, label: 'IPFS Upload' },
+        { id: 2, label: 'On-chain Tx' },
+        { id: 3, label: 'Complete' },
     ]
     return (
         <div className="step-bar">
@@ -64,7 +72,7 @@ function StepBar({ step }) {
                     <div key={s.id} style={{ display: 'flex', alignItems: 'center', flex: i < steps.length - 1 ? 1 : 'none' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                             <div className={`step-circle ${state}`}>
-                                {active && step < 3 ? <div className="spinner" style={{ width: 18, height: 18 }} /> : s.icon}
+                                {active && step < 3 ? <div className="spinner" style={{ width: 14, height: 14 }} /> : s.id + 1}
                             </div>
                             <span className={`step-label ${state}`}>{s.label}</span>
                         </div>
@@ -76,71 +84,73 @@ function StepBar({ step }) {
     )
 }
 
-/* ══ TAB: OVERVIEW ══════════════════════════════════════════════ */
+/* ── Stat Card ──────────────────────────────────────────────── */
+function StatCard({ label, value, sub, color, onClick, delay }) {
+    return (
+        <div
+            className={`glass${onClick ? ' glass-hover' : ''} fade-up`}
+            onClick={onClick}
+            style={{ padding: '1.25rem 1.5rem', animationDelay: delay, cursor: onClick ? 'pointer' : 'default' }}
+        >
+            <p className="section-label" style={{ marginBottom: '0.65rem' }}>{label}</p>
+            <div className="stat-value" style={{ color: color || 'var(--text-1)', marginBottom: sub ? 4 : 0 }}>{value}</div>
+            {sub && <div style={{ fontSize: '0.68rem', color: 'var(--text-3)', fontFamily: 'monospace', wordBreak: 'break-all', marginTop: 2 }}>{sub}</div>}
+        </div>
+    )
+}
+
+/* ══ TAB: OVERVIEW ═════════════════════════════════════════════ */
 function OverviewTab({ data, loading, onRefresh, setTab }) {
     return (
         <div>
             <div className="fade-up" style={{ marginBottom: '2rem', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
                 <div>
-                    <h1 style={{ marginBottom: 5 }}>
-                        Blockchain{' '}
-                        <span style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>Dashboard</span>
-                    </h1>
-                    <p style={{ margin: 0, fontSize: '0.86rem' }}>FedShield · Polygon Amoy Testnet</p>
+                    <h1 style={{ marginBottom: '0.4rem' }}>Blockchain Dashboard</h1>
+                    <p style={{ margin: 0, fontSize: '0.875rem' }}>FedShield · Polygon Amoy Testnet</p>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <div className="pulse-dot" />
-                        <span style={{ fontSize: '0.72rem', color: 'var(--text-2)' }}>Live · auto-refresh 30s</span>
+                        <span style={{ fontSize: '0.74rem', color: 'var(--text-2)' }}>Live · auto-refresh 30s</span>
                     </div>
-                    <button className="btn btn-ghost" onClick={onRefresh} style={{ padding: '0.4rem 0.9rem', fontSize: '0.76rem' }}>↻ Refresh</button>
+                    <button className="btn btn-ghost" onClick={onRefresh} style={{ padding: '0.38rem 0.875rem', fontSize: '0.78rem' }}>Refresh</button>
                 </div>
             </div>
 
             {loading && !data ? (
-                <div style={{ display: 'flex', justifyContent: 'center', padding: '5rem' }}><div className="spinner" style={{ width: 30, height: 30 }} /></div>
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '5rem' }}><div className="spinner" style={{ width: 28, height: 28 }} /></div>
             ) : data ? (
                 <>
                     {/* Stat cards */}
-                    <div className="stagger" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
-                        {[
-                            { icon: '🔄', label: 'Current Round', value: data.round, color: '#6366f1' },
-                            { icon: '📦', label: 'Model Versions', value: data.totalVersions, color: '#8b5cf6', click: () => setTab('History') },
-                            { icon: '👥', label: 'Clients This Round', value: data.clientCount ?? '—', color: '#0ea5e9', click: () => setTab('Clients') },
-                            { icon: '🔒', label: 'Latest CID', value: short(data.latestCid), sub: data.latestCid, color: '#22c55e' },
-                        ].map(({ icon, label, value, sub, color, click }, i) => (
-                            <div key={label} className="glass glass-hover fade-up" onClick={click}
-                                style={{ padding: '1.35rem', display: 'flex', gap: '0.9rem', alignItems: 'flex-start', cursor: click ? 'pointer' : 'default', animationDelay: `${i * 0.07}s` }}>
-                                <div style={{ width: 46, height: 46, borderRadius: 12, flexShrink: 0, background: `${color}1a`, border: `1px solid ${color}33`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem' }}>{icon}</div>
-                                <div style={{ minWidth: 0 }}>
-                                    <div style={{ fontSize: '0.66rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.09em', color: 'var(--text-3)', marginBottom: 4 }}>{label}</div>
-                                    <div style={{ fontSize: '1.45rem', fontWeight: 800, lineHeight: 1.1 }}>{value}</div>
-                                    {sub && <div style={{ fontSize: '0.68rem', color: 'var(--text-2)', marginTop: 3, fontFamily: 'monospace', wordBreak: 'break-all' }}>{sub}</div>}
-                                </div>
-                            </div>
-                        ))}
+                    <div className="stagger" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: '0.875rem', marginBottom: '1.25rem' }}>
+                        <StatCard label="Current Round" value={data.round} color="var(--accent-2)" delay="0s" />
+                        <StatCard label="Model Versions" value={data.totalVersions} onClick={() => setTab('History')} delay="0.05s" />
+                        <StatCard label="Clients This Round" value={data.clientCount ?? '—'} onClick={() => setTab('Clients')} delay="0.10s" />
+                        <StatCard label="Latest CID" value={short(data.latestCid)} sub={data.latestCid} delay="0.15s" />
                     </div>
 
                     {/* Latest model banner */}
                     {data.latestCid && (
-                        <div className="glass fade-up" style={{ padding: '1.3rem 1.5rem', marginBottom: '1.5rem', background: 'linear-gradient(135deg,rgba(99,102,241,0.09),rgba(139,92,246,0.06))', borderColor: 'rgba(99,102,241,0.28)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', animationDelay: '0.3s' }}>
-                            <div>
-                                <div style={{ fontSize: '0.67rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.09em', color: 'var(--accent)', marginBottom: 5 }}>🌐 Latest Global Model</div>
-                                <code style={{ fontSize: '0.8rem', background: 'none', padding: 0, wordBreak: 'break-all' }}>{data.latestCid}</code>
-                            </div>
-                            <div style={{ display: 'flex', gap: '0.6rem' }}>
-                                <a href={`https://gateway.pinata.cloud/ipfs/${data.latestCid}`} target="_blank" rel="noreferrer" className="btn btn-ghost" style={{ padding: '0.4rem 0.88rem', fontSize: '0.76rem' }}>☁️ IPFS</a>
-                                <button className="btn btn-primary" onClick={() => setTab('Upload')} style={{ padding: '0.4rem 0.88rem', fontSize: '0.76rem' }}>🚀 Upload New</button>
+                        <div className="glass fade-up" style={{ padding: '1.25rem 1.5rem', marginBottom: '1.25rem', borderColor: 'rgba(99,102,241,0.2)', animationDelay: '0.2s' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+                                <div>
+                                    <p className="section-label" style={{ marginBottom: '0.4rem' }}>Latest Global Model</p>
+                                    <code style={{ fontSize: '0.78rem', background: 'none', padding: 0, wordBreak: 'break-all', color: 'var(--text-1)' }}>{data.latestCid}</code>
+                                </div>
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <a href={`https://gateway.pinata.cloud/ipfs/${data.latestCid}`} target="_blank" rel="noreferrer" className="btn btn-ghost" style={{ padding: '0.38rem 0.875rem', fontSize: '0.78rem' }}>View on IPFS</a>
+                                    <button className="btn btn-primary" onClick={() => setTab('Upload')} style={{ padding: '0.38rem 0.875rem', fontSize: '0.78rem' }}>Upload New</button>
+                                </div>
                             </div>
                         </div>
                     )}
 
                     {/* Recent history */}
                     {data.versions?.length > 0 && (
-                        <div className="glass fade-up" style={{ overflow: 'hidden', animationDelay: '0.35s' }}>
-                            <div style={{ padding: '0.9rem 1.3rem', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                <h3 style={{ fontSize: '0.92rem' }}>📋 Recent Global Models</h3>
-                                <button className="btn btn-ghost" onClick={() => setTab('History')} style={{ padding: '0.32rem 0.7rem', fontSize: '0.73rem' }}>View all →</button>
+                        <div className="glass fade-up" style={{ overflow: 'hidden', animationDelay: '0.25s' }}>
+                            <div style={{ padding: '0.875rem 1.25rem', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                <h3 style={{ fontSize: '0.875rem', fontWeight: 600 }}>Recent Global Models</h3>
+                                <button className="btn btn-ghost" onClick={() => setTab('History')} style={{ padding: '0.3rem 0.65rem', fontSize: '0.74rem' }}>View all</button>
                             </div>
                             <div style={{ overflowX: 'auto' }}>
                                 <table>
@@ -149,10 +159,10 @@ function OverviewTab({ data, loading, onRefresh, setTab }) {
                                         {data.versions.slice(-5).reverse().map((v, i) => (
                                             <tr key={i}>
                                                 <td><span className="badge badge-accent">v{v.version}</span></td>
-                                                <td style={{ color: 'var(--text-2)' }}>{v.round}</td>
-                                                <td><a href={v.gateway} target="_blank" rel="noreferrer" style={{ fontFamily: 'monospace', fontSize: '0.76rem' }}>{short(v.ipfsCID)}</a></td>
+                                                <td style={{ color: 'var(--text-2)', fontSize: '0.85rem' }}>{v.round}</td>
+                                                <td><a href={v.gateway} target="_blank" rel="noreferrer" style={{ fontFamily: 'monospace', fontSize: '0.77rem' }}>{short(v.ipfsCID)}</a></td>
                                                 <td style={{ color: 'var(--text-2)', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>{ago(v.timestamp)}</td>
-                                                <td style={{ fontFamily: 'monospace', fontSize: '0.7rem', color: 'var(--text-3)' }}>{short(v.recordedBy)}</td>
+                                                <td style={{ fontFamily: 'monospace', fontSize: '0.72rem', color: 'var(--text-3)' }}>{short(v.recordedBy)}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -163,7 +173,7 @@ function OverviewTab({ data, loading, onRefresh, setTab }) {
                 </>
             ) : (
                 <div className="glass fade-up" style={{ padding: '3rem', textAlign: 'center' }}>
-                    <p style={{ marginBottom: '1rem' }}>⚠️ Could not reach blockchain server on port 4000.</p>
+                    <p style={{ marginBottom: '1rem' }}>Could not reach blockchain server on port 4000.</p>
                     <button className="btn btn-primary" onClick={onRefresh}>Retry</button>
                 </div>
             )}
@@ -205,15 +215,18 @@ function UploadTab({ onSuccess }) {
         } catch (e) { setError(e.message); setStep(0) }
     }
 
+    const dropZoneBg = dragging ? 'rgba(99,102,241,0.07)' : file ? 'rgba(34,197,94,0.04)' : 'transparent'
+    const dropZoneBorder = dragging ? 'var(--accent-2)' : file ? 'rgba(34,197,94,0.4)' : 'rgba(255,255,255,0.1)'
+
     return (
         <div>
             <div className="fade-up" style={{ marginBottom: '2rem' }}>
-                <h1 style={{ marginBottom: 5 }}>Upload &amp; Register</h1>
-                <p style={{ margin: 0, fontSize: '0.86rem' }}>Pin a model file to IPFS and record the CID on-chain in one step</p>
+                <h1 style={{ marginBottom: '0.4rem' }}>Upload & Register</h1>
+                <p style={{ margin: 0, fontSize: '0.875rem' }}>Pin a model file to IPFS and record the CID on-chain in one step</p>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', alignItems: 'start' }}>
-                <div className="glass fade-up" style={{ padding: '2rem' }}>
+                <div className="glass fade-up" style={{ padding: '1.75rem' }}>
                     <StepBar step={step} />
 
                     {/* Drop zone */}
@@ -223,73 +236,94 @@ function UploadTab({ onSuccess }) {
                         onDragLeave={() => setDragging(false)}
                         onDrop={onDrop}
                         style={{
-                            border: `2px dashed ${dragging ? 'var(--accent)' : file ? 'rgba(34,197,94,0.5)' : 'var(--border)'}`,
-                            borderRadius: 'var(--r-md)', padding: '2.5rem 1.5rem', textAlign: 'center',
+                            border: `1.5px dashed ${dropZoneBorder}`,
+                            borderRadius: 'var(--r-md)',
+                            padding: '2.5rem 1.5rem',
+                            textAlign: 'center',
                             cursor: step === 0 ? 'pointer' : 'default',
-                            background: dragging ? 'rgba(99,102,241,0.07)' : file ? 'rgba(34,197,94,0.04)' : 'rgba(255,255,255,0.02)',
-                            transition: 'all 0.22s', boxShadow: dragging ? '0 0 32px rgba(99,102,241,0.18)' : 'none',
-                        }}>
+                            background: dropZoneBg,
+                            transition: 'all 0.18s',
+                        }}
+                    >
                         <input ref={fileRef} type="file" accept=".json" hidden onChange={e => pickFile(e.target.files[0])} />
                         {file ? (
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                                <span style={{ fontSize: '2.8rem' }}>📄</span>
-                                <span style={{ fontWeight: 700 }}>{file.name}</span>
-                                <span style={{ fontSize: '0.75rem', color: 'var(--text-3)' }}>{(file.size / 1024).toFixed(1)} KB</span>
-                                {step === 0 && <button className="btn btn-ghost" onClick={e => { e.stopPropagation(); setFile(null) }} style={{ padding: '0.28rem 0.75rem', fontSize: '0.73rem' }}>✕ Remove</button>}
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
+                                <div style={{ width: 44, height: 44, borderRadius: 10, background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <div style={{ fontWeight: 600, fontSize: '0.875rem', marginBottom: 3 }}>{file.name}</div>
+                                    <div style={{ fontSize: '0.74rem', color: 'var(--text-3)' }}>{(file.size / 1024).toFixed(1)} KB</div>
+                                </div>
+                                {step === 0 && (
+                                    <button className="btn btn-ghost" onClick={e => { e.stopPropagation(); setFile(null) }} style={{ padding: '0.25rem 0.65rem', fontSize: '0.73rem' }}>
+                                        Remove
+                                    </button>
+                                )}
                             </div>
                         ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10 }}>
-                                <span style={{ fontSize: '3rem', transition: 'filter 0.2s', filter: dragging ? 'drop-shadow(0 0 14px #6366f1)' : 'none' }}>☁️</span>
-                                <p style={{ fontWeight: 600, color: 'var(--text-1)', margin: 0 }}>Drag & drop your JSON model</p>
-                                <p style={{ fontSize: '0.8rem', margin: 0 }}>or <span style={{ color: 'var(--accent)', fontWeight: 600 }}>click to browse</span></p>
+                                <div style={{ width: 44, height: 44, borderRadius: 10, background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/>
+                                        <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <p style={{ fontWeight: 600, color: 'var(--text-1)', margin: '0 0 4px', fontSize: '0.875rem' }}>Drag & drop your JSON model</p>
+                                    <p style={{ fontSize: '0.8rem', margin: 0 }}>or <span style={{ color: 'var(--accent-2)', fontWeight: 600 }}>click to browse</span></p>
+                                </div>
                             </div>
                         )}
                     </div>
 
-                    {error && <div className="alert-error fade-in" style={{ marginTop: '1rem' }}>⚠️ {error}</div>}
+                    {error && <div className="alert-error fade-in" style={{ marginTop: '1rem' }}>{error}</div>}
 
-                    <div style={{ marginTop: '1.2rem', display: 'flex', gap: '0.7rem' }}>
-                        <button className="btn btn-primary" onClick={submit} disabled={!file || (step > 0 && step < 3)}
-                            style={{ flex: 1, justifyContent: 'center' }}>
-                            {step === 1 ? <><div className="spinner" style={{ width: 15, height: 15 }} /> Uploading…</>
-                                : step === 2 ? <><div className="spinner" style={{ width: 15, height: 15 }} /> Submitting tx…</>
-                                    : step === 3 ? '✅ Upload another'
-                                        : '🚀 Upload & Register'}
+                    <div style={{ marginTop: '1rem', display: 'flex', gap: '0.6rem' }}>
+                        <button className="btn btn-primary" onClick={submit} disabled={!file || (step > 0 && step < 3)} style={{ flex: 1, justifyContent: 'center' }}>
+                            {step === 1 ? <><div className="spinner" style={{ width: 14, height: 14 }} />Uploading…</>
+                                : step === 2 ? <><div className="spinner" style={{ width: 14, height: 14 }} />Submitting tx…</>
+                                    : step === 3 ? 'Upload another'
+                                        : 'Upload & Register'}
                         </button>
-                        {(step === 3 || error) && <button className="btn btn-ghost" onClick={() => { setFile(null); setStep(0); setResult(null); setError('') }}>↺</button>}
+                        {(step === 3 || error) && (
+                            <button className="btn btn-ghost" onClick={() => { setFile(null); setStep(0); setResult(null); setError('') }}>Reset</button>
+                        )}
                     </div>
                 </div>
 
                 {/* Result / how-it-works */}
                 <div className="fade-up" style={{ animationDelay: '0.1s' }}>
                     {result ? (
-                        <div className="glass" style={{ padding: '1.6rem', borderColor: 'rgba(34,197,94,0.28)', boxShadow: '0 0 30px rgba(34,197,94,0.07)' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '1.2rem' }}>
-                                <span style={{ fontSize: '1.6rem' }}>🎉</span>
-                                <div>
-                                    <h3 style={{ color: 'var(--success)', marginBottom: 2 }}>Successfully Registered</h3>
-                                    <span style={{ fontSize: '0.74rem', color: 'var(--text-2)' }}>Pinned on IPFS · Stored on Polygon Amoy</span>
-                                </div>
+                        <div className="glass" style={{ padding: '1.5rem', borderColor: 'rgba(34,197,94,0.22)' }}>
+                            <div style={{ marginBottom: '1.25rem' }}>
+                                <h3 style={{ color: 'var(--success)', marginBottom: 4, fontSize: '0.95rem' }}>Successfully Registered</h3>
+                                <span style={{ fontSize: '0.75rem', color: 'var(--text-2)' }}>Pinned on IPFS · Stored on Polygon Amoy</span>
                             </div>
                             {[['IPFS CID', result.cid, result.gateway], ['Transaction', result.txHash, result.explorer], ['Block', `#${result.blockNumber}`, null]].map(([label, val, link]) => (
                                 <div key={label} style={{ padding: '0.7rem 0', borderBottom: '1px solid var(--border)' }}>
-                                    <div style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-3)', marginBottom: 4 }}>{label}</div>
-                                    {link ? <a href={link} target="_blank" rel="noreferrer" style={{ fontFamily: 'monospace', fontSize: '0.77rem', wordBreak: 'break-all' }}>{val}</a>
-                                        : <span style={{ fontFamily: 'monospace', fontSize: '0.77rem', wordBreak: 'break-all' }}>{val}</span>}
+                                    <div className="section-label" style={{ marginBottom: 5 }}>{label}</div>
+                                    {link ? <a href={link} target="_blank" rel="noreferrer" style={{ fontFamily: 'monospace', fontSize: '0.78rem', wordBreak: 'break-all' }}>{val}</a>
+                                        : <span style={{ fontFamily: 'monospace', fontSize: '0.78rem', wordBreak: 'break-all' }}>{val}</span>}
                                 </div>
                             ))}
                         </div>
                     ) : (
-                        <div className="glass" style={{ padding: '1.6rem' }}>
-                            <h3 style={{ marginBottom: '1rem', fontSize: '0.93rem' }}>ℹ️ How it works</h3>
+                        <div className="glass" style={{ padding: '1.5rem' }}>
+                            <h3 style={{ marginBottom: '1.25rem', fontSize: '0.875rem', fontWeight: 600 }}>How it works</h3>
                             {[
-                                ['1', '📤 IPFS Upload', 'Your .json file is pinned permanently via Pinata'],
-                                ['2', '🔗 On-chain Register', 'The CID is stored in FedShieldCoordinator as a new version'],
-                                ['3', '📋 Immutable History', 'Every version is queryable on Polygon Amoy forever'],
+                                ['1', 'IPFS Upload', 'Your .json file is pinned permanently via Pinata'],
+                                ['2', 'On-chain Register', 'The CID is stored in FedShieldCoordinator as a new version'],
+                                ['3', 'Immutable History', 'Every version is queryable on Polygon Amoy forever'],
                             ].map(([n, title, desc]) => (
-                                <div key={n} style={{ display: 'flex', gap: '0.85rem', marginBottom: '0.9rem' }}>
-                                    <div style={{ width: 26, height: 26, borderRadius: '50%', background: 'rgba(99,102,241,0.15)', border: '1px solid rgba(99,102,241,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 700, color: 'var(--accent)', flexShrink: 0 }}>{n}</div>
-                                    <div><div style={{ fontSize: '0.83rem', fontWeight: 600, marginBottom: 2 }}>{title}</div><div style={{ fontSize: '0.76rem', color: 'var(--text-2)' }}>{desc}</div></div>
+                                <div key={n} style={{ display: 'flex', gap: '0.875rem', marginBottom: '1rem' }}>
+                                    <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--accent-subtle)', border: '1px solid rgba(99,102,241,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.68rem', fontWeight: 700, color: 'var(--accent-2)', flexShrink: 0, marginTop: 1 }}>{n}</div>
+                                    <div>
+                                        <div style={{ fontSize: '0.84rem', fontWeight: 600, marginBottom: 2 }}>{title}</div>
+                                        <div style={{ fontSize: '0.76rem', color: 'var(--text-2)', lineHeight: 1.5 }}>{desc}</div>
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -300,7 +334,7 @@ function UploadTab({ onSuccess }) {
     )
 }
 
-/* ══ TAB: HISTORY ═══════════════════════════════════════════════ */
+/* ══ TAB: HISTORY ════════════════════════════════════════════════ */
 function HistoryTab() {
     const [versions, setVersions] = useState([])
     const [loading, setLoading] = useState(true)
@@ -321,41 +355,41 @@ function HistoryTab() {
 
     return (
         <div>
-            <div className="fade-up" style={{ marginBottom: '1.8rem', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+            <div className="fade-up" style={{ marginBottom: '1.75rem', display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
                 <div>
-                    <h1 style={{ marginBottom: 4 }}>Model History</h1>
-                    <p style={{ margin: 0, fontSize: '0.85rem' }}>{versions.length} version{versions.length !== 1 ? 's' : ''} recorded on-chain</p>
+                    <h1 style={{ marginBottom: '0.4rem' }}>Model History</h1>
+                    <p style={{ margin: 0, fontSize: '0.875rem' }}>{versions.length} version{versions.length !== 1 ? 's' : ''} recorded on-chain</p>
                 </div>
                 <div style={{ display: 'flex', gap: '0.6rem' }}>
-                    <input type="text" placeholder="Search CID, address, version…" value={search} onChange={e => setSearch(e.target.value)} style={{ maxWidth: 260, fontSize: '0.82rem', padding: '0.45rem 0.9rem' }} />
-                    <button className="btn btn-ghost" onClick={load} style={{ padding: '0.45rem 0.85rem', fontSize: '0.76rem' }}>↻</button>
+                    <input type="text" placeholder="Search CID, address, version…" value={search} onChange={e => setSearch(e.target.value)} style={{ maxWidth: 260, fontSize: '0.82rem', padding: '0.45rem 0.875rem' }} />
+                    <button className="btn btn-ghost" onClick={load} style={{ padding: '0.45rem 0.875rem', fontSize: '0.78rem' }}>Refresh</button>
                 </div>
             </div>
 
             {loading ? (
-                <div style={{ display: 'flex', justifyContent: 'center', padding: '4rem' }}><div className="spinner" style={{ width: 28, height: 28 }} /></div>
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '4rem' }}><div className="spinner" style={{ width: 26, height: 26 }} /></div>
             ) : filtered.length === 0 ? (
                 <div className="glass fade-up" style={{ padding: '3rem', textAlign: 'center' }}>
                     <p style={{ color: 'var(--text-2)' }}>{search ? 'No matching versions.' : 'No model versions recorded yet.'}</p>
                 </div>
             ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
                     {filtered.map((v, i) => (
-                        <div key={i} className="glass glass-hover fade-up" style={{ padding: '1.1rem 1.4rem', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', animationDelay: `${Math.min(i, 6) * 0.05}s` }}>
-                            <div style={{ width: 50, height: 50, borderRadius: 13, flexShrink: 0, background: 'rgba(99,102,241,0.14)', border: '1px solid rgba(99,102,241,0.28)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                                <span style={{ fontSize: '0.55rem', fontWeight: 700, color: 'var(--text-3)', textTransform: 'uppercase' }}>ver</span>
-                                <span style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--accent)', lineHeight: 1 }}>{v.version}</span>
+                        <div key={i} className="glass glass-hover fade-up" style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', gap: '1rem', flexWrap: 'wrap', animationDelay: `${Math.min(i, 6) * 0.04}s` }}>
+                            <div style={{ width: 48, height: 48, borderRadius: 12, flexShrink: 0, background: 'var(--accent-subtle)', border: '1px solid rgba(99,102,241,0.2)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                                <span style={{ fontSize: '0.52rem', fontWeight: 600, color: 'var(--text-3)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>ver</span>
+                                <span style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--accent-2)', lineHeight: 1 }}>{v.version}</span>
                             </div>
                             <div style={{ flex: 1, minWidth: 0 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4, flexWrap: 'wrap' }}>
-                                    <span className="badge badge-accent" style={{ fontSize: '0.63rem' }}>Round {v.round}</span>
-                                    <span style={{ fontSize: '0.7rem', color: 'var(--text-2)' }}>{new Date(v.timestamp * 1000).toLocaleString()}</span>
-                                    <span style={{ fontSize: '0.7rem', color: 'var(--text-3)' }}>· {ago(v.timestamp)}</span>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 5, flexWrap: 'wrap' }}>
+                                    <span className="badge badge-accent" style={{ fontSize: '0.65rem' }}>Round {v.round}</span>
+                                    <span style={{ fontSize: '0.72rem', color: 'var(--text-2)' }}>{new Date(v.timestamp * 1000).toLocaleString()}</span>
+                                    <span style={{ fontSize: '0.72rem', color: 'var(--text-3)' }}>· {ago(v.timestamp)}</span>
                                 </div>
-                                <a href={v.gateway} target="_blank" rel="noreferrer" style={{ fontFamily: 'monospace', fontSize: '0.77rem', wordBreak: 'break-all' }}>{v.ipfsCID}</a>
-                                <div style={{ fontSize: '0.68rem', color: 'var(--text-3)', marginTop: 3, fontFamily: 'monospace' }}>By: {v.recordedBy}</div>
+                                <a href={v.gateway} target="_blank" rel="noreferrer" style={{ fontFamily: 'monospace', fontSize: '0.78rem', wordBreak: 'break-all' }}>{v.ipfsCID}</a>
+                                <div style={{ fontSize: '0.7rem', color: 'var(--text-3)', marginTop: 2, fontFamily: 'monospace' }}>By: {v.recordedBy}</div>
                             </div>
-                            <a href={v.gateway} target="_blank" rel="noreferrer" className="btn btn-ghost" style={{ padding: '0.35rem 0.75rem', fontSize: '0.73rem', flexShrink: 0 }}>☁️ IPFS</a>
+                            <a href={v.gateway} target="_blank" rel="noreferrer" className="btn btn-ghost" style={{ padding: '0.32rem 0.75rem', fontSize: '0.74rem', flexShrink: 0 }}>IPFS</a>
                         </div>
                     ))}
                 </div>
@@ -385,33 +419,33 @@ function ClientsTab({ currentRound }) {
 
     return (
         <div>
-            <div className="fade-up" style={{ marginBottom: '1.8rem' }}>
-                <h1 style={{ marginBottom: 4 }}>Client Updates</h1>
-                <p style={{ margin: 0, fontSize: '0.85rem' }}>Browse local model submissions from federated nodes per round</p>
+            <div className="fade-up" style={{ marginBottom: '1.75rem' }}>
+                <h1 style={{ marginBottom: '0.4rem' }}>Client Updates</h1>
+                <p style={{ margin: 0, fontSize: '0.875rem' }}>Browse local model submissions from federated nodes per round</p>
             </div>
 
             {/* Round picker */}
-            <div className="glass fade-up" style={{ padding: '1.1rem 1.3rem', marginBottom: '1.4rem', display: 'flex', alignItems: 'center', gap: '0.7rem', flexWrap: 'wrap' }}>
-                <button className="btn btn-ghost" onClick={() => fetchRound(Math.max(1, roundNum - 1))} disabled={loading || roundNum <= 1} style={{ padding: '0.42rem 0.75rem', fontSize: '0.85rem' }}>‹</button>
-                <input type="number" min="1" placeholder="Round" value={round} onChange={e => setRound(e.target.value)} onKeyDown={e => e.key === 'Enter' && fetchRound()} style={{ maxWidth: 100, textAlign: 'center', padding: '0.42rem 0.6rem', fontSize: '0.85rem' }} />
-                <button className="btn btn-ghost" onClick={() => fetchRound(roundNum + 1)} disabled={loading} style={{ padding: '0.42rem 0.75rem', fontSize: '0.85rem' }}>›</button>
-                <button className="btn btn-primary" onClick={() => fetchRound()} disabled={loading} style={{ padding: '0.42rem 1rem', fontSize: '0.8rem' }}>
-                    {loading ? <><div className="spinner" style={{ width: 13, height: 13 }} /> Loading…</> : '→ Fetch'}
+            <div className="glass fade-up" style={{ padding: '1rem 1.25rem', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap' }}>
+                <button className="btn btn-ghost" onClick={() => fetchRound(Math.max(1, roundNum - 1))} disabled={loading || roundNum <= 1} style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }}>‹</button>
+                <input type="number" min="1" placeholder="Round" value={round} onChange={e => setRound(e.target.value)} onKeyDown={e => e.key === 'Enter' && fetchRound()} style={{ maxWidth: 96, textAlign: 'center', padding: '0.4rem 0.6rem', fontSize: '0.875rem' }} />
+                <button className="btn btn-ghost" onClick={() => fetchRound(roundNum + 1)} disabled={loading} style={{ padding: '0.4rem 0.75rem', fontSize: '0.875rem' }}>›</button>
+                <button className="btn btn-primary" onClick={() => fetchRound()} disabled={loading} style={{ padding: '0.4rem 1rem', fontSize: '0.82rem' }}>
+                    {loading ? <><div className="spinner" style={{ width: 13, height: 13 }} />Loading…</> : 'Fetch'}
                 </button>
                 {currentRound > 0 && (
-                    <button className="btn btn-ghost" onClick={() => fetchRound(currentRound)} disabled={loading} style={{ padding: '0.42rem 0.85rem', fontSize: '0.76rem' }}>
-                        Jump to current (#{currentRound})
+                    <button className="btn btn-ghost" onClick={() => fetchRound(currentRound)} disabled={loading} style={{ padding: '0.4rem 0.875rem', fontSize: '0.78rem' }}>
+                        Current (#{currentRound})
                     </button>
                 )}
-                {err && <span style={{ color: 'var(--danger)', fontSize: '0.8rem' }}>⚠️ {err}</span>}
+                {err && <span style={{ color: 'var(--danger)', fontSize: '0.82rem' }}>{err}</span>}
             </div>
 
             {loading ? (
-                <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}><div className="spinner" style={{ width: 28, height: 28 }} /></div>
+                <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}><div className="spinner" style={{ width: 26, height: 26 }} /></div>
             ) : updates ? (
                 <div className="fade-in">
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: '1rem' }}>
-                        <h3 style={{ fontSize: '0.93rem' }}>Round {updates.round}</h3>
+                        <h3 style={{ fontSize: '0.9rem', fontWeight: 600 }}>Round {updates.round}</h3>
                         <span className={`badge ${updates.total > 0 ? 'badge-success' : 'badge-warning'}`}>{updates.total} update{updates.total !== 1 ? 's' : ''}</span>
                     </div>
                     {updates.total === 0 ? (
@@ -419,26 +453,21 @@ function ClientsTab({ currentRound }) {
                             <p style={{ color: 'var(--text-2)' }}>No client updates for round {updates.round}.</p>
                         </div>
                     ) : (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-                            {updates.updates.map((u, i) => (
-                                <div key={i} className="glass glass-hover fade-up" style={{ padding: '1rem 1.3rem', animationDelay: `${i * 0.05}s` }}>
-                                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.9rem', flexWrap: 'wrap' }}>
-                                        <div style={{ width: 38, height: 38, borderRadius: 10, flexShrink: 0, background: 'rgba(14,165,233,0.12)', border: '1px solid rgba(14,165,233,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem' }}>👤</div>
-                                        <div style={{ flex: 1, minWidth: 0 }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' }}>
-                                                <code style={{ fontSize: '0.77rem', color: '#0ea5e9', background: 'none', padding: 0 }}>{u.nodeAddress}</code>
-                                                <span style={{ fontSize: '0.7rem', color: 'var(--text-3)' }}>{ago(u.timestamp)}</span>
-                                            </div>
-                                            <div style={{ marginBottom: u.metadata ? 4 : 0 }}>
-                                                <span style={{ fontSize: '0.7rem', color: 'var(--text-3)' }}>CID: </span>
-                                                <a href={u.gateway} target="_blank" rel="noreferrer" style={{ fontFamily: 'monospace', fontSize: '0.75rem' }}>{u.ipfsCID}</a>
-                                            </div>
-                                            {u.metadata && <div style={{ fontSize: '0.74rem', fontFamily: 'monospace', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', borderRadius: 6, padding: '0.28rem 0.6rem', display: 'inline-block', color: 'var(--text-2)' }}>{u.metadata}</div>}
-                                        </div>
-                                        <a href={u.gateway} target="_blank" rel="noreferrer" className="btn btn-ghost" style={{ padding: '0.32rem 0.7rem', fontSize: '0.72rem', flexShrink: 0 }}>☁️</a>
-                                    </div>
-                                </div>
-                            ))}
+                        <div className="glass" style={{ overflow: 'hidden' }}>
+                            <table>
+                                <thead><tr><th>Node Address</th><th>IPFS CID</th><th>Submitted</th><th>Metadata</th><th></th></tr></thead>
+                                <tbody>
+                                    {updates.updates.map((u, i) => (
+                                        <tr key={i}>
+                                            <td><code style={{ fontSize: '0.76rem', color: 'var(--accent-2)', background: 'none', padding: 0 }}>{short(u.nodeAddress)}</code></td>
+                                            <td><a href={u.gateway} target="_blank" rel="noreferrer" style={{ fontFamily: 'monospace', fontSize: '0.76rem' }}>{short(u.ipfsCID)}</a></td>
+                                            <td style={{ fontSize: '0.78rem', color: 'var(--text-2)', whiteSpace: 'nowrap' }}>{ago(u.timestamp)}</td>
+                                            <td>{u.metadata && <span style={{ fontSize: '0.74rem', fontFamily: 'monospace', background: 'rgba(255,255,255,0.04)', border: '1px solid var(--border)', borderRadius: 4, padding: '0.2rem 0.5rem', color: 'var(--text-2)' }}>{u.metadata}</span>}</td>
+                                            <td><a href={u.gateway} target="_blank" rel="noreferrer" className="btn btn-ghost" style={{ padding: '0.28rem 0.65rem', fontSize: '0.72rem' }}>IPFS</a></td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
                     )}
                 </div>
@@ -472,53 +501,53 @@ function NodesTab() {
 
     return (
         <div>
-            <div className="fade-up" style={{ marginBottom: '1.8rem', display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 46, height: 46, borderRadius: 13, background: 'rgba(245,158,11,0.14)', border: '1px solid rgba(245,158,11,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.3rem' }}>👑</div>
-                <div>
-                    <h1 style={{ marginBottom: 3 }}>Node Management</h1>
-                    <p style={{ margin: 0, fontSize: '0.85rem' }}>Authorize nodes to submit local model updates</p>
-                </div>
+            <div className="fade-up" style={{ marginBottom: '1.75rem' }}>
+                <h1 style={{ marginBottom: '0.4rem' }}>Node Management</h1>
+                <p style={{ margin: 0, fontSize: '0.875rem' }}>Authorize nodes to submit local model updates</p>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', alignItems: 'start' }}>
-                <div className="glass fade-up" style={{ padding: '1.8rem' }}>
-                    <h3 style={{ fontSize: '0.92rem', marginBottom: '1.3rem', display: 'flex', alignItems: 'center', gap: 7 }}><span style={{ color: 'var(--success)' }}>✅</span> Authorize Node</h3>
-                    <label style={{ fontSize: '0.73rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-3)', display: 'block', marginBottom: 7 }}>Node Ethereum Address</label>
-                    <input type="text" placeholder="0x0000…0000" value={address} onChange={e => { setAddress(e.target.value); setError(''); setResult(null) }} onKeyDown={e => e.key === 'Enter' && submit()} style={{ marginBottom: '1rem', fontFamily: 'monospace', fontSize: '0.82rem' }} />
-                    {error && <div className="alert-error fade-in" style={{ marginBottom: '1rem' }}>⚠️ {error}</div>}
+                <div className="glass fade-up" style={{ padding: '1.75rem' }}>
+                    <h3 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '1.25rem' }}>Authorize Node</h3>
+                    <label style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-2)', display: 'block', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Node Ethereum Address</label>
+                    <input type="text" placeholder="0x0000…0000" value={address} onChange={e => { setAddress(e.target.value); setError(''); setResult(null) }} onKeyDown={e => e.key === 'Enter' && submit()} style={{ marginBottom: '1rem', fontFamily: 'monospace', fontSize: '0.84rem' }} />
+                    {error && <div className="alert-error fade-in" style={{ marginBottom: '1rem' }}>{error}</div>}
                     <button className="btn btn-primary" onClick={submit} disabled={loading || !address} style={{ width: '100%', justifyContent: 'center' }}>
-                        {loading ? <><div className="spinner" style={{ width: 15, height: 15 }} /> Sending tx…</> : '🔐 Authorize Node'}
+                        {loading ? <><div className="spinner" style={{ width: 14, height: 14 }} />Sending tx…</> : 'Authorize Node'}
                     </button>
-                    <p style={{ fontSize: '0.73rem', color: 'var(--text-3)', marginTop: '1rem', textAlign: 'center' }}>Only the contract owner can authorize nodes</p>
+                    <p style={{ fontSize: '0.74rem', color: 'var(--text-3)', marginTop: '0.875rem', textAlign: 'center' }}>Only the contract owner can authorize nodes</p>
                 </div>
 
                 <div className="fade-up" style={{ animationDelay: '0.1s' }}>
                     {result ? (
-                        <div className="glass" style={{ padding: '1.5rem', borderColor: 'rgba(34,197,94,0.28)' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: '1.2rem' }}>
-                                <span style={{ fontSize: '1.5rem' }}>✅</span>
-                                <div><h3 style={{ color: 'var(--success)', marginBottom: 2 }}>Node Authorized</h3><span style={{ fontSize: '0.73rem', color: 'var(--text-2)' }}>Confirmed on Polygon Amoy</span></div>
+                        <div className="glass" style={{ padding: '1.5rem', borderColor: 'rgba(34,197,94,0.22)' }}>
+                            <div style={{ marginBottom: '1.25rem' }}>
+                                <h3 style={{ color: 'var(--success)', marginBottom: 4, fontSize: '0.95rem' }}>Node Authorized</h3>
+                                <span style={{ fontSize: '0.74rem', color: 'var(--text-2)' }}>Confirmed on Polygon Amoy</span>
                             </div>
                             {[['Address', result.address, null], ['Transaction', result.txHash, result.explorer], ['Block', `#${result.blockNumber}`, null]].map(([label, val, link]) => (
                                 <div key={label} style={{ padding: '0.65rem 0', borderBottom: '1px solid var(--border)' }}>
-                                    <div style={{ fontSize: '0.64rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--text-3)', marginBottom: 4 }}>{label}</div>
-                                    {link ? <a href={link} target="_blank" rel="noreferrer" style={{ fontFamily: 'monospace', fontSize: '0.76rem', wordBreak: 'break-all' }}>{val}</a>
-                                        : <span style={{ fontFamily: 'monospace', fontSize: '0.76rem', wordBreak: 'break-all' }}>{val}</span>}
+                                    <div className="section-label" style={{ marginBottom: 4 }}>{label}</div>
+                                    {link ? <a href={link} target="_blank" rel="noreferrer" style={{ fontFamily: 'monospace', fontSize: '0.77rem', wordBreak: 'break-all' }}>{val}</a>
+                                        : <span style={{ fontFamily: 'monospace', fontSize: '0.77rem', wordBreak: 'break-all' }}>{val}</span>}
                                 </div>
                             ))}
                         </div>
                     ) : (
                         <div className="glass" style={{ padding: '1.5rem' }}>
-                            <h3 style={{ fontSize: '0.92rem', marginBottom: '0.9rem' }}>ℹ️ About Authorization</h3>
+                            <h3 style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '1rem' }}>About Authorization</h3>
                             {[
-                                ['🔐', 'Access Control', 'Only authorized nodes can submit local updates'],
-                                ['⛓️', 'On-chain', '`addNode(address)` recorded on Polygon Amoy'],
-                                ['🧑‍💼', 'Owner Only', 'Only the deployer wallet can authorize nodes'],
-                                ['📡', 'Federated', 'Authorized nodes join the training rounds'],
-                            ].map(([icon, title, desc]) => (
-                                <div key={title} style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.8rem' }}>
-                                    <span style={{ fontSize: '0.95rem', lineHeight: 1.4, flexShrink: 0 }}>{icon}</span>
-                                    <div><div style={{ fontSize: '0.82rem', fontWeight: 600, marginBottom: 2 }}>{title}</div><div style={{ fontSize: '0.74rem', color: 'var(--text-2)' }}>{desc}</div></div>
+                                ['Access Control', 'Only authorized nodes can submit local updates'],
+                                ['On-chain', 'addNode(address) recorded on Polygon Amoy'],
+                                ['Owner Only', 'Only the deployer wallet can authorize nodes'],
+                                ['Federated', 'Authorized nodes join the training rounds'],
+                            ].map(([title, desc]) => (
+                                <div key={title} style={{ display: 'flex', gap: '0.75rem', marginBottom: '0.875rem' }}>
+                                    <div style={{ width: 5, height: 5, borderRadius: '50%', background: 'var(--accent-2)', flexShrink: 0, marginTop: 6 }} />
+                                    <div>
+                                        <div style={{ fontSize: '0.84rem', fontWeight: 600, marginBottom: 2 }}>{title}</div>
+                                        <div style={{ fontSize: '0.76rem', color: 'var(--text-2)', lineHeight: 1.5 }}>{desc}</div>
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -559,7 +588,7 @@ export default function Blockchain() {
     return (
         <div style={{ minHeight: '100vh', paddingBottom: '4rem' }}>
             <Navbar tab={tab} setTab={setTab} account={account} isOwner={isOwner} onLogout={logout} />
-            <div style={{ maxWidth: 1160, margin: '0 auto', padding: '2.5rem 1.5rem' }}>
+            <div style={{ maxWidth: 1200, margin: '0 auto', padding: '2.5rem 1.5rem' }}>
                 {tab === 'Overview' && <OverviewTab data={data} loading={loading} onRefresh={fetchAll} setTab={setTab} />}
                 {tab === 'Upload' && <UploadTab onSuccess={fetchAll} />}
                 {tab === 'History' && <HistoryTab />}

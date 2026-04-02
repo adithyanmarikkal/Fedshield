@@ -22,15 +22,19 @@ Usage:
 
 import os
 import sys
-import glob
 import json
-import tempfile
+import time
 import argparse
 import requests
 import numpy as np
-import xgboost as xgb
-from pathlib import Path
 from collections import defaultdict
+
+# Load .env from the same directory as this script
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(os.path.dirname(__file__), ".env"))
+except ImportError:
+    pass  # dotenv not installed; rely on environment variables
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 BLOCKCHAIN_API = os.getenv("BLOCKCHAIN_API", "http://localhost:4000")
@@ -158,11 +162,12 @@ def aggregate_histograms_fedavg(client_json_paths: list[str]) -> dict:
 
     agg = defaultdict(lambda: defaultdict(lambda: {"G": None, "H": None}))
 
-    for data, _ in zip(client_data, weights):
+    # Apply FedAvg weights to G and H before summing
+    for data, w in zip(client_data, weights):
         for feat, feat_hist in data.get("histograms", {}).items():
             for bin_name, bin_data in feat_hist.items():
-                G = np.array(bin_data["G"])
-                H = np.array(bin_data["H"])
+                G = np.array(bin_data["G"]) * w   # weighted gradient
+                H = np.array(bin_data["H"]) * w   # weighted hessian
                 if agg[feat][bin_name]["G"] is None:
                     agg[feat][bin_name]["G"] = G.copy()
                     agg[feat][bin_name]["H"] = H.copy()
@@ -193,19 +198,18 @@ def build_global_model(
     agg_histograms: dict,
     base_model_path: str | None,
     output_path: str,
-) -> xgb.XGBClassifier:
+) -> dict:
     """
-    Build (or update) the global XGBoost model.
-    Currently uses the base model as the global model and records the aggregated
-    histogram metadata alongside it.  In production you would rebuild trees from
-    the gradient statistics.
+    Build the global model JSON by embedding the aggregated FedAvg histogram
+    statistics into the base model file so that the output content is unique
+    every round (preventing Pinata from returning a duplicate CID).
     """
     _header("🌍 BUILDING GLOBAL MODEL")
 
     if base_model_path and os.path.exists(base_model_path):
         print(f"   📂 Loading base model: {base_model_path}")
-        model = xgb.XGBClassifier()
-        model.load_model(base_model_path)
+        with open(base_model_path, "r") as fh:
+            base_model_json = json.load(fh)
         print("   ✅ Base model loaded")
     else:
         raise FileNotFoundError(
@@ -213,52 +217,100 @@ def build_global_model(
             "   Provide a Central_model.json or set MODEL_DIR correctly."
         )
 
+    # Embed the aggregated histogram metadata inside the model JSON.
+    # This guarantees a different file content (and therefore a new IPFS CID)
+    # each round even if the XGBoost tree structure hasn't changed.
+    base_model_json["federated_metadata"] = {
+        "aggregation_method": agg_histograms.get("aggregation_method", "FedAvg"),
+        "num_clients": agg_histograms.get("num_clients"),
+        "total_samples": agg_histograms.get("total_samples"),
+        "client_weights": agg_histograms.get("client_weights"),
+        "client_ids": agg_histograms.get("client_ids"),
+        "aggregated_at": int(time.time()),
+        # Compact histogram summary (sum of G/H norms per feature)
+        "feature_stats": {
+            feat: {
+                "G_norm": float(np.sum([np.sum(np.abs(b["G"])) for b in bins.values()])),
+                "H_norm": float(np.sum([np.sum(np.abs(b["H"])) for b in bins.values()])),
+            }
+            for feat, bins in agg_histograms.get("histograms", {}).items()
+        },
+    }
+
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
-    model.save_model(output_path)
+    with open(output_path, "w") as fh:
+        json.dump(base_model_json, fh, indent=2)
     print(f"   💾 Global model saved → {output_path}")
 
-    # Also save the aggregated histogram metadata next to the model
+    # Also save the full aggregated histograms separately
     hist_path = output_path.replace(".json", "_histograms.json")
     with open(hist_path, "w") as fh:
         json.dump(agg_histograms, fh, indent=2)
     print(f"   💾 Aggregated histograms → {hist_path}")
 
-    return model
+    return base_model_json
 
 
 # ══════════════════════════════════════════════════════════════════════════════
 # STEP 4 – Upload aggregated model and register on-chain  (admin only)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def upload_and_register_global_model(api_base: str, model_path: str) -> dict:
+def upload_to_ipfs_via_pinata(model_path: str) -> str:
     """
-    POST the aggregated model file to /api/upload-and-register.
-    The blockchain server signs the updateGlobalModel() tx with the admin wallet.
-    Returns the JSON response { cid, txHash, blockNumber, gateway, explorer }.
+    Upload the aggregated model JSON to Pinata (IPFS) directly.
+    Returns the new CID.
     """
-    _header("🔗 UPLOADING & REGISTERING GLOBAL MODEL (ADMIN)")
-    url = f"{api_base}/api/upload-and-register"
-    print(f"   📤 POST {url}")
-    print(f"   📁 File: {model_path}")
+    pinata_jwt = os.getenv("PINATA_JWT", "")
+    if not pinata_jwt:
+        raise EnvironmentError("PINATA_JWT env var is not set.")
+
+    url = "https://api.pinata.cloud/pinning/pinFileToIPFS"
+    pin_name = f"fedshield_global_{int(time.time())}"
+    print(f"   📤 Uploading to Pinata as '{pin_name}'…")
 
     with open(model_path, "rb") as fh:
         resp = requests.post(
             url,
-            files={"model": (os.path.basename(model_path), fh, "application/json")},
-            data={"pinName": f"fedshield_global_{int(__import__('time').time())}"},
+            headers={"Authorization": f"Bearer {pinata_jwt}"},
+            files={"file": (os.path.basename(model_path), fh, "application/json")},
+            data={"pinataMetadata": json.dumps({"name": pin_name})},
             timeout=DOWNLOAD_TIMEOUT,
         )
 
     if not resp.ok:
+        raise RuntimeError(f"Pinata upload failed [{resp.status_code}]: {resp.text[:500]}")
+
+    cid = resp.json()["IpfsHash"]
+    print(f"   ✅ IPFS CID : {cid}")
+    return cid
+
+
+def register_global_model_on_chain(api_base: str, cid: str) -> dict:
+    """
+    Register an already-uploaded CID as the new global model on-chain
+    via POST /api/update-global-model (the admin wallet signs the tx).
+    Returns the JSON response { success, cid, txHash, blockNumber, explorer }.
+    """
+    _header("🔗 REGISTERING GLOBAL MODEL ON-CHAIN (ADMIN)")
+    url = f"{api_base}/api/update-global-model"
+    print(f"   📤 POST {url}  CID={cid}")
+
+    resp = requests.post(
+        url,
+        json={"cid": cid},
+        timeout=REQUEST_TIMEOUT,
+    )
+
+    if not resp.ok:
         raise RuntimeError(
-            f"upload-and-register failed [{resp.status_code}]: {resp.text[:500]}"
+            f"update-global-model failed [{resp.status_code}]: {resp.text[:500]}"
         )
 
     result = resp.json()
     print(f"   ✅ CID       : {result.get('cid')}")
     print(f"   ✅ Tx Hash   : {result.get('txHash')}")
     print(f"   ✅ Block     : {result.get('blockNumber')}")
-    print(f"   🌐 Gateway   : {result.get('gateway')}")
+    print(f"   🌐 Gateway   : https://gateway.pinata.cloud/ipfs/{cid}")
     print(f"   🔍 Explorer  : {result.get('explorer')}")
     return result
 
@@ -347,9 +399,10 @@ def run_aggregation(api_base: str, target_round: int | None = None):
     global_model_out = os.path.join(MODEL_DIR, "global_model.json")
     build_global_model(agg_histograms, base_model_path, global_model_out)
 
-    # ── 4. Upload & register on-chain (admin) ─────────────────────────────────
-    print("\n📤 STEP 4 – Uploading aggregated model & registering on-chain…")
-    result = upload_and_register_global_model(api_base, global_model_out)
+    # ── 4. Upload to IPFS & register on-chain (admin) ─────────────────────────
+    print("\n📤 STEP 4 – Uploading aggregated model to IPFS & registering on-chain…")
+    new_cid = upload_to_ipfs_via_pinata(global_model_out)
+    result = register_global_model_on_chain(api_base, new_cid)
 
     # ── Summary ───────────────────────────────────────────────────────────────
     _sep("═")
@@ -358,7 +411,7 @@ def run_aggregation(api_base: str, target_round: int | None = None):
     print(f"   Round aggregated  : {agg_round}")
     print(f"   Clients included  : {agg_histograms['num_clients']}")
     print(f"   Total samples     : {agg_histograms['total_samples']}")
-    print(f"   New global CID    : {result.get('cid')}")
+    print(f"   New global CID    : {new_cid}")
     print(f"   Tx Hash           : {result.get('txHash')}")
     print(f"   Explorer          : {result.get('explorer')}")
     _sep("═")
